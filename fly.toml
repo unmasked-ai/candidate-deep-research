@@ -18,13 +18,18 @@ primary_region = 'iad'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
   processes = ['app']
+
+[[http_service.checks]]
+  type = "http"
+  path = "/v1/docs"       # a route you know returns 200
+  interval = "5s"
+  timeout = "2s"
+  grace_period = "20s"
 
 [[vm]]
   memory = '2gb'
   cpu_kind = 'shared'
   cpus = 1
-
-[processes]
-  app = "bash -lc \"REGISTRY_FILE_PATH=$REGISTRY_FILE_PATH ./gradlew --no-daemon run\""
+  memory_mb = 2048
