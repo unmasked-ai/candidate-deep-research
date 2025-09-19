@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: coral-server
+    env: docker
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: REGISTRY_FILE_PATH
+        value: /app/registry.toml
+      # uncomment if you add a config.toml
+      # - key: CONFIG_FILE_PATH
+      #   value: /app/config.toml
+      - key: PORT
+        value: "5555"  # optional hint for port detection
