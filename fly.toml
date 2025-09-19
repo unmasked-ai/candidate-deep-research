@@ -21,13 +21,6 @@ primary_region = 'iad'
   min_machines_running = 1
   processes = ['app']
 
-[[http_service.checks]]
-  type = "http"
-  path = "/v1/docs"       # a route you know returns 200
-  interval = "5s"
-  timeout = "2s"
-  grace_period = "20s"
-
 [[vm]]
   memory = '2gb'
   cpu_kind = 'shared'
