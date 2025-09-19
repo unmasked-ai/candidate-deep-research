@@ -7,11 +7,6 @@ app = 'candidate-deep-research-server'
 primary_region = 'iad'
 
 [build]
-  # Ensure these match what your Dockerfile / startup expects
-  PORT = "5555"
-  REGISTRY_FILE_PATH = "/app/registry.toml"
-  # If you add a full config file (config.toml) for Coral
-  # CONFIG_FILE_PATH = "/app/config.toml"
 
 [http_service]
   internal_port = 5555
@@ -21,15 +16,8 @@ primary_region = 'iad'
   min_machines_running = 0
   processes = ['app']
 
-[[http_service.checks]]
-  type = "http"
-  path = "/v1/docs"       # a route you know returns 200
-  interval = "5s"
-  timeout = "2s"
-  grace_period = "20s"
-
 [[vm]]
-  memory = '2gb'
+  memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
   memory_mb = 2048
