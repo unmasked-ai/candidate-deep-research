@@ -20,6 +20,8 @@ type = "string"
 description = "What model provider to use (e.g 'openai', etc)"
 default = "openai"
 
+[options.MODEL_MAX_TOKENS]
+type = "string"
 description = "Max tokens to use"
 default = "16000"
 
