@@ -23,6 +23,8 @@ gradle-app.setting
 .gradletasknamecache
 *.log
 
+temp/
+
 # Java
 *.class
 *.jar
