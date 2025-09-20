@@ -3,8 +3,16 @@ name: Match Evaluation Agent Tests
 on:
   push:
     branches: [ main, match-evaluation-agent ]
+    paths:
+      - 'agents/match-evaluation/**'
+      - 'tests/agents/match-evaluation/**'
+      - '.github/workflows/match-evaluation-tests.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'agents/match-evaluation/**'
+      - 'tests/agents/match-evaluation/**'
+      - '.github/workflows/match-evaluation-tests.yml'
   workflow_dispatch:
 
 # Ensure tests run for any changes to match-evaluation agent or tests
@@ -176,33 +184,8 @@ jobs:
           echo ""
           echo "The match-evaluation agent is ready for production deployment."
 
-  # Optional: Add a job to check if changes affect the match-evaluation agent
-  check-agent-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      agent-changed: ${{ steps.changes.outputs.agent-changed }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check for agent changes
-        id: changes
-        run: |
-          if git diff --name-only ${{ github.event.before || 'HEAD~1' }}..${{ github.sha }} | grep -E "(agents/match-evaluation/|tests/agents/match-evaluation/)"; then
-            echo "agent-changed=true" >> $GITHUB_OUTPUT
-            echo "Match evaluation agent or test files changed"
-          else
-            echo "agent-changed=false" >> $GITHUB_OUTPUT
-            echo "No match evaluation agent changes detected"
-          fi
-
-  # Job that only runs if agent files changed
-  agent-specific-tests:
-    needs: check-agent-changes
-    if: needs.check-agent-changes.outputs.agent-changed == 'true'
+  # Extended tests - always run for this workflow
+  extended-tests:
     runs-on: ubuntu-latest
 
     steps:
