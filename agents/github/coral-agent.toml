@@ -15,11 +15,6 @@ type = "string"
 description = "What model to use (e.g 'gpt-4.1')"
 default = "x-ai/grok-4-fast:free"
 
-[options.MODEL_BASE_URL]
-type = "string"
-description = "What model base URL to use (e.g 'https://api.openai.com/v1')"
-default = "https://openrouter.ai/api/v1"
-default = "x-ai/grok-4-fast:free"
 
 [options.MODEL_BASE_URL]
 type = "string"

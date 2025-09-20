@@ -87,8 +87,8 @@ async def create_agent(coral_tools, agent_tools):
                 {{
                 "candidate": "<github_username>",
                 "competencies": {{"weights_used": {{"<comp>": <float>}}, "scores": {{"<comp>": <float|null>}}, "weighted_score": <float>}},
-                "strengths": {{"<comp>": <float>}, reason: "<reason>"},
-                "weak_competencies": {{"<comp>": <float>}, reason: "<reason>"},
+                "strengths": {{"<comp>": <float>, "reason": "<reason>"}},
+                "weak_competencies": {{"<comp>": <float>, "reason": "<reason>"}},
                 "overall_score": <float>
                 }}
 
