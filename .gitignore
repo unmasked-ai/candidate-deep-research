@@ -7,6 +7,9 @@
 .DS_Store
 Thumbs.db
 
+temp/
+.env.local
+
 # OS generated files
 .DS_Store
 .DS_Store?
