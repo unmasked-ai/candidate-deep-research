@@ -5,75 +5,21 @@
     "agents": [
       {
         "id": {
-          "name": "linkedin",
+          "name": "interface",
           "version": "0.0.1"
         },
-        "name": "linkedin",
+        "name": "interface",
         "coralPlugins": [],
         "provider": {
           "type": "local",
           "runtime": "executable"
         },
         "blocking": true,
-        "options": {
-          "MODEL_API_KEY": {
-            "type": "string",
-            "value": ""
-          },
-          "APIFY_API_KEY": {
-            "type": "string",
-            "value": ""
-          }
-        },
-        "customToolAccess": []
-      },
-      {
-        "id": {
-          "name": "firecrawl",
-          "version": "0.0.1"
-        },
-        "name": "firecrawl",
-        "coralPlugins": [],
-        "provider": {
-          "type": "local",
-          "runtime": "executable"
-        },
-        "blocking": true,
-        "options": {
-          "MODEL_API_KEY": {
-            "type": "string",
-            "value": ""
-          },
-          "FIRECRAWL_API_KEY": {
-            "type": "string",
-            "value": ""
-          }
-        },
-        "customToolAccess": []
-      },
-      {
-        "id": {
-          "name": "github",
-          "version": "0.0.1"
-        },
-        "name": "github",
-        "coralPlugins": [],
-        "provider": {
-          "type": "local",
-          "runtime": "executable"
-        },
-        "blocking": true,
-        "options": {
-          "MODEL_API_KEY": {
-            "type": "string",
-            "value": ""
-          },
-          "GITHUB_PERSONAL_ACCESS_TOKEN": {
-            "type": "string",
-            "value": ""
-          }
-        },
-        "customToolAccess": []
+        "options": {},
+        "customToolAccess": [
+          "user-input-request",
+          "user-input-respond"
+        ]
       },
       {
         "id": {
@@ -87,12 +33,7 @@
           "runtime": "executable"
         },
         "blocking": true,
-        "options": {
-          "MODEL_API_KEY": {
-            "type": "string",
-            "value": ""
-          }
-        },
+        "options": {},
         "customToolAccess": []
       },
       {
@@ -107,37 +48,38 @@
           "runtime": "executable"
         },
         "blocking": true,
-        "options": {
-          "MODEL_API_KEY": {
-            "type": "string",
-            "value": ""
-          }
-        },
+        "options": {},
         "customToolAccess": []
       },
       {
         "id": {
-          "name": "interface",
+          "name": "role-requirements-builder",
           "version": "0.0.1"
         },
-        "name": "interface",
+        "name": "role-requirements-builder",
         "coralPlugins": [],
         "provider": {
           "type": "local",
           "runtime": "executable"
         },
         "blocking": true,
-        "options": {
-          "MODEL_API_KEY": {
-            "type": "string",
-            "value": ""
-          }
+        "options": {},
+        "customToolAccess": []
+      },
+      {
+        "id": {
+          "name": "linkedin",
+          "version": "0.0.1"
         },
-        "systemPrompt": "",
-        "customToolAccess": [
-          "user-input-request",
-          "user-input-respond"
-        ]
+        "name": "linkedin",
+        "coralPlugins": [],
+        "provider": {
+          "type": "local",
+          "runtime": "executable"
+        },
+        "blocking": true,
+        "options": {},
+        "customToolAccess": []
       }
     ],
     "customTools": {
@@ -185,12 +127,11 @@
     },
     "groups": [
       [
-        "linkedin",
-        "firecrawl",
-        "github",
+        "interface",
         "person-research",
         "company-research",
-        "interface"
+        "role-requirements-builder",
+        "linkedin"
       ]
     ]
   }
