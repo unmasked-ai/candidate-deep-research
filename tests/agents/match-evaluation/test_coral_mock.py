@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../agents/match-evaluation"))
 #!/usr/bin/env python3
 """
 Mock Coral Protocol test for match-evaluation agent

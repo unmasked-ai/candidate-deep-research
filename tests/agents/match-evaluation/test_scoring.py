@@ -5,6 +5,12 @@ Tests the core logic without requiring Coral Protocol or other agents
 """
 
 import json
+import sys
+import os
+
+# Add the agent directory to the Python path so we can import main
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../agents/match-evaluation'))
+
 from main import calculate_match_score
 
 def test_perfect_match():
@@ -89,23 +95,25 @@ def test_moderate_match():
     """Test case: Moderate candidate match"""
     test_data = {
         "job_spec": {
-            "role_title": "Python Engineer",
-            "tech_stack": ["python", "postgres"],
-            "must_have_hard_skills": ["python"],
-            "nice_to_have_hard_skills": ["postgres", "docker"],
-            "industry": "saas",
-            "experience_requirements": {"years_min": 3.0}
+            "role_title": "Senior Python Engineer",
+            "seniority": "senior",
+            "tech_stack": ["python", "postgres", "kubernetes"],
+            "must_have_hard_skills": ["python", "postgres"],
+            "nice_to_have_hard_skills": ["kubernetes", "docker"],
+            "industry": "fintech",
+            "experience_requirements": {"years_min": 5.0}
         },
         "candidate_profile": {
             "name": "Mid Developer",
-            "years_experience": 4.0,
-            "current_title": "Software Engineer",
-            "skills": ["python", "mysql", "docker"],
-            "industry_experience": ["ecommerce", "saas"]
+            "years_experience": 5.0,  # Meets minimum experience
+            "current_title": "Software Engineer",  # Not senior level
+            "skills": ["python", "postgres", "java"],  # Has must-haves but different tech stack
+            "industry_experience": ["ecommerce"]  # Different industry
         },
         "company_profile": {
-            "name": "SaaSCorp",
-            "industry": "saas"
+            "name": "FinTechCorp",
+            "industry": "fintech",
+            "culture_fit": {"score": 60}  # Moderate culture fit
         }
     }
 
