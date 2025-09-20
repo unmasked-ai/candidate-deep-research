@@ -207,6 +207,8 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
         f"[VERBOSE] Tools description generated: {len(coral_tools_description)} characters"
     )
 
+    query = os.getenv("USER_REQUEST")
+    
     print("[VERBOSE] Creating chat prompt template...")
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -226,6 +228,9 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
                 Your primary role is to plan tasks sent by the user and send clear instructions to other agents to execute them, focusing solely on questions about the Coral Server, its tools: {coral_tools_description}, and registered agents. 
                 Always use {{chat_history}} to understand the context of the question along with the user's instructions. 
                 Think carefully about the question, analyze its intent, and create a detailed plan to address it, considering the roles and capabilities of available agents, description and their tools. 
+                
+                You are tasked with analysising if this candidate is sutiable for the job by researching them. 
+                Heres is their Linkedin: {query}
                 """,
             ),
             ("human", "{user_input}"),
