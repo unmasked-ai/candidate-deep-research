@@ -9,4 +9,6 @@ dependencies = [
     "uvicorn",
     "httpx",
     "python-dotenv",
+    "python-multipart",
+    "pydantic",
 ]
