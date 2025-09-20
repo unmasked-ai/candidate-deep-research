@@ -15,14 +15,29 @@ def get_tools_description(tools):
 
 
 async def create_agent(coral_tools, agent_tools):
-    # coral_tools_description = get_tools_description(coral_tools)
-    # agent_tools_description = get_tools_description(agent_tools)
+    coral_tools_description = get_tools_description(coral_tools)
+    agent_tools_description = get_tools_description(agent_tools)
     combined_tools = coral_tools + agent_tools
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                "You are an agent interacting with the tools from Coral Server and having your own tools. Your task is to fetch data from Twitter given a Twitter handle or search query and provide a summary of the user's profile, recent tweets, followers, and following. The agent can also search tweets based on keywords and date ranges.",
+                f"""You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
+
+                Communication with other agents must occur in threads.  You can create a thread with the $CREATE_THREAD tool,
+                make sure to include the agents you want to communicate with in the thread.  It is possible to add agents to an existing
+                thread with the $ADD_PARTICIPANT tool.  If a thread has reached a conclusion or is no longer productive, you
+                can close the thread with the $CLOSE_THREAD tool.  It is very important to use the $SEND_MESSAGE 
+                tool to communicate in these threads as no other agent will see your messages otherwise!  If you have sent a message 
+                and expect or require a response from another agent, use the $WAIT_FOR_MENTIONS tool to wait for a response.
+
+                In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
+
+                You are an agent interacting with the tools from Coral Server and having your own tools. Your task is to fetch data from Twitter given a Twitter handle or search query and provide a summary of the user's profile, recent tweets, followers, and following. The agent can also search tweets based on keywords and date ranges.
+
+                These are the list of coral tools: {coral_tools_description}
+                These are the list of your tools: {agent_tools_description}
+                """,
             ),
             ("placeholder", "{agent_scratchpad}"),
         ]
