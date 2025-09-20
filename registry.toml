@@ -1,4 +1,7 @@
 [[local-agent]]
+path = "agents/linkedin"
+
+[[local-agent]]
 path = "agents/firecrawl"
 
 [[local-agent]]
@@ -6,3 +9,9 @@ path = "agents/github"
 
 [[local-agent]]
 path = "agents/interface"
+
+[[local-agent]]
+path = "agents/person-research"
+
+[[local-agent]]
+path = "agents/company-research"

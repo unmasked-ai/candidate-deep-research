@@ -15,31 +15,27 @@ def get_tools_description(tools):
 
 
 async def create_agent(coral_tools, agent_tools):
-    coral_tools_description = get_tools_description(coral_tools)
-    agent_tools_description = get_tools_description(agent_tools)
+    # coral_tools_description = get_tools_description(coral_tools)
+    # agent_tools_description = get_tools_description(agent_tools)
     combined_tools = coral_tools + agent_tools
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"""You are an agent interacting with the tools from Coral Server and having your own tools. Your task is to perform any instructions coming from any agent.
-            
-            These are the list of coral tools: {coral_tools_description}
-            These are the list of your tools: {agent_tools_description}""",
+                "You are an agent interacting with the tools from Coral Server and having your own tools. Your task is to fetch data from Twitter given a Twitter handle or search query and provide a summary of the user's profile, recent tweets, followers, and following. The agent can also search tweets based on keywords and date ranges.",
             ),
             ("placeholder", "{agent_scratchpad}"),
         ]
     )
 
     model = init_chat_model(
-        model=os.getenv("MODEL_NAME", "gpt-4.1-mini"),
+        model=os.getenv("MODEL_NAME", "gpt-4.1"),
         model_provider=os.getenv("MODEL_PROVIDER", "openai"),
         api_key=os.getenv("MODEL_API_KEY"),
-        temperature=os.getenv("MODEL_TEMPERATURE", "0.3"),
-        max_tokens=os.getenv("MODEL_MAX_TOKENS", "16000"),
+        temperature=os.getenv("MODEL_TEMPERATURE", "0.1"),
+        max_tokens=os.getenv("MODEL_MAX_TOKENS", "8000"),
         base_url=os.getenv("MODEL_BASE_URL", None),
     )
-
     agent = create_tool_calling_agent(model, combined_tools, prompt)
     return AgentExecutor(
         agent=agent, tools=combined_tools, verbose=True, handle_parsing_errors=True
@@ -56,7 +52,7 @@ async def main():
 
     coral_params = {
         "agentId": agentID,
-        "agentDescription": "Github agent can create, update, and search for repositories and files, as well as view/edit issues and pull requests (depending on permissions)",
+        "agentDescription": "An agent that can fetch data from Twitter given a Twitter handle or search query and provide a summary of the user's profile, recent tweets, followers, and following. The agent can also search tweets based on keywords and date ranges.",
     }
 
     query_string = urllib.parse.urlencode(coral_params)
@@ -73,28 +69,24 @@ async def main():
                 "timeout": timeout,
                 "sse_read_timeout": timeout,
             },
-            "github": {
-                "transport": "stdio",
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-github"],
-                "env": {
-                    "GITHUB_PERSONAL_ACCESS_TOKEN": os.getenv(
-                        "GITHUB_PERSONAL_ACCESS_TOKEN"
-                    )
-                },
+            "apify": {
+                "transport": "sse",
+                "url": "https://mcp.apify.com/sse?tools=fetch-actor-details,call-actor,docs",
+                "headers": {"Authorization": f"Bearer {os.getenv('APIFY_API_KEY')}"},
             },
         }
     )
 
-    print("Multi Server Connection Initialized")
+    print("Multi Server Connection Established")
 
     coral_tools = await client.get_tools(server_name="coral")
-    github_tools = await client.get_tools(server_name="github")
+    agent_tools = await client.get_tools(server_name="apify")
+
     print(
-        f"Coral tools count: {len(coral_tools)}, GitHub tools count: {len(github_tools)}"
+        f"Coral tools count: {len(coral_tools)} and agent tools count: {len(agent_tools)}"
     )
 
-    agent_executor = await create_agent(coral_tools, github_tools)
+    agent_executor = await create_agent(coral_tools, agent_tools)
 
     while True:
         try:
@@ -103,8 +95,8 @@ async def main():
             print("Completed agent invocation, restarting loop")
             await asyncio.sleep(1)
         except Exception as e:
-            print(f"Error in agent loop: {e}")
-            traceback.print_exc()
+            print(f"Error in agent loop: {str(e)}")
+            print(traceback.format_exc())
             await asyncio.sleep(5)
 
 
