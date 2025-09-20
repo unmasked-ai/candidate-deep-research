@@ -1,8 +1,7 @@
 [agent]
 name = "github"
 version = "0.0.1"
-description = "Github agent that can create, update, and search for repositories and files, as well as view/edit issues and pull requests (depending on the permissions of its access token)"
-
+description = "GitHub analysis agent that looks at user profile and measures it against weighted competencies. Looks at profile and gets a weighted score. Requires github_profile_url and competency_weights object. Explores repo to analyze repo structures, configurations, and development practices. Returns JSON with competency scores, evidence, and overall weighted assessment."
 [options.MODEL_API_KEY]
 type = "string"
 description = "API key for the model provider"
@@ -21,8 +20,6 @@ type = "string"
 description = "What model provider to use (e.g 'openai', etc)"
 default = "openai"
 
-[options.MODEL_MAX_TOKENS]
-type = "string"
 description = "Max tokens to use"
 default = "16000"
 
