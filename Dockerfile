@@ -1,27 +1,33 @@
 # syntax=docker/dockerfile:1
-FROM eclipse-temurin:21-jdk
+FROM eclipse-temurin:21-jdk AS build
 
-# Needed if we decide to fetch submodules or tools during build
+# Optional tools if we need to fetch the upstream coral-server when missing
 RUN apt-get update && apt-get install -y git bash && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-# Bring in your fork (including registry.toml at repo root)
+WORKDIR /build
 COPY . .
 
-# Ensure coral-server code exists even if submodules aren't auto-fetched by the platform
-# (Render may not clone with --recurse-submodules)
+# Ensure coral-server exists even if submodules aren't fetched
 RUN test -f coral-server/gradlew || (rm -rf coral-server && git clone --depth 1 https://github.com/Coral-Protocol/coral-server.git coral-server)
 
-# Pre-warm Gradle to speed boots
-WORKDIR /app/coral-server
-RUN ./gradlew --no-daemon --version && ./gradlew --no-daemon classes
+WORKDIR /build/coral-server
+# Build an uber JAR at image build time (faster startup on Fly)
+RUN ./gradlew --no-daemon build -x test
 
-# Helpful for Render's port detection (server defaults to 5555)
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+
+# Copy registry (if present in repo root)
+COPY --from=build /build/registry.toml /app/registry.toml
+
+# Copy built artifacts and select the fat JAR
+COPY --from=build /build/coral-server/build/libs/ /app/
+RUN ln -s "$(ls -1 /app/coral-server-*.jar | grep -v '\-plain\.jar' | head -n 1)" /app/app.jar
+
+# Environment for platform hints and runtime config
 ENV PORT=5555
 ENV REGISTRY_FILE_PATH=/app/registry.toml
 
-# For documentation only; Render autodetects listening ports for Docker images
 EXPOSE 5555
 
-# Start Coral Server via gradle-run, pointing at your registry.toml
-CMD ["bash", "-lc", "REGISTRY_FILE_PATH=$REGISTRY_FILE_PATH ./gradlew --no-daemon run"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

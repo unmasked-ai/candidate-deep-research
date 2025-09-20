@@ -15,3 +15,6 @@ path = "agents/person-research"
 
 [[local-agent]]
 path = "agents/company-research"
+
+[[local-agent]]
+path = "agents/role-requirements-builder"
