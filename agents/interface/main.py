@@ -182,22 +182,6 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
             f"""Your primary role is to plan tasks sent by the user and send clear instructions to other agents to execute them, focusing solely on questions about the Coral Server, its tools: {coral_tools_description}, and registered agents. 
             Always use {{chat_history}} to understand the context of the question along with the user's instructions. 
             Think carefully about the question, analyze its intent, and create a detailed plan to address it, considering the roles and capabilities of available agents, description and their tools. 
-
-            Follow the steps in order:
-            1. Call list_agents to get all connected agents and their descriptions.
-            2. Check if the question is directly related to Coral Server (e.g., list agents, tool details). For such requests, use appropriate tools to retrieve and return the information.
-            3. If the question requires interaction with other agents, analyze the user's intent using chat history to resolve ambiguous references (e.g., 'it'). Create a detailed plan to delegate tasks:
-                - Identify which agents are relevant based on their descriptions and tools.
-                - If the task requires sequential processing (e.g., one agent's output is needed by another), structure the plan to specify the order of agent interactions.
-                - Call create_thread('threadName': 'user_request', 'participantIds': [IDs, including self]) to initiate collaboration.
-                - For each selected agent:
-                - If not in thread, call add_participant(threadId=..., 'participantIds': [agent ID]).
-                - Send clear instructions via send_message(threadId=..., content="instruction", mentions=[agent ID]). Instructions should specify the task, any dependencies (e.g., "use output from Agent X"), and expected output format.
-                - Use wait_for_mentions(timeoutMs=60000) up to 5 times to collect responses.
-                - Store responses for synthesis.
-            4. Synthesize responses into a clear, concise answer, referencing chat history if relevant to maintain context.
-            5. Return the answer.
-
             """
         ),
         ("human", "{user_input}"),
@@ -206,7 +190,7 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
     print("[VERBOSE] Chat prompt template created successfully")
 
     print("[VERBOSE] Initializing chat model...")
-    print(f"[VERBOSE] Model configuration:")
+    print("[VERBOSE] Model configuration:")
     print(f"[VERBOSE]   - model: {os.getenv('MODEL_NAME')}")
     print(f"[VERBOSE]   - provider: {os.getenv('MODEL_PROVIDER')}")
     print(f"[VERBOSE]   - api_key: {'***' if os.getenv('MODEL_API_KEY') else None}")
@@ -319,7 +303,7 @@ async def main():
                 print(f"[VERBOSE] Chat history formatted: {len(formatted_history)} characters")
                 
                 print("[VERBOSE] Invoking agent executor...")
-                print(f"[VERBOSE] Agent executor input:")
+                print("[VERBOSE] Agent executor input:")
                 print(f"[VERBOSE]   - user_input: {user_input}")
                 print(f"[VERBOSE]   - chat_history length: {len(formatted_history)} chars")
                 

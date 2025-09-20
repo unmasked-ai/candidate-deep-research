@@ -13,32 +13,23 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+
 async def create_agent(coral_tools, agent_tools):
     coral_tools_description = get_tools_description(coral_tools)
     agent_tools_description = get_tools_description(agent_tools)
     combined_tools = coral_tools + agent_tools
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            f"""You are an agent interacting with the tools from Coral Server and having your own tools. Your task is to perform any instructions coming from any agent. 
-            Follow these steps in order:
-            1. Call wait_for_mentions from coral tools (timeoutMs: 30000) to receive mentions from other agents.
-            2. When you receive a mention, keep the thread ID and the sender ID.
-            3. Take 2 seconds to think about the content (instruction) of the message and check only from the list of your tools available for you to action.
-            4. Check the tool schema and make a plan in steps for the task you want to perform.
-            5. Only call the tools you need to perform for each step of the plan to complete the instruction in the content.
-            6. Take 3 seconds and think about the content and see if you have executed the instruction to the best of your ability and the tools. Make this your response as "answer".
-            7. Use `send_message` from coral tools to send a message in the same thread ID to the sender Id you received the mention from, with content: "answer".
-            8. If any error occurs, use `send_message` to send a message in the same thread ID to the sender Id you received the mention from, with content: "error".
-            9. Always respond back to the sender agent even if you have no answer or error.
-            9. Wait for 2 seconds and repeat the process from step 1.
-
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                f"""Agent that can search & scrape the web, providing easy to parse markdown
+            
             These are the list of coral tools: {coral_tools_description}
-            These are the list of your tools: {agent_tools_description}"""
-                ),
-                ("placeholder", "{agent_scratchpad}")
-
-    ])
+            These are the list of your tools: {agent_tools_description}""",
+            ),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
 
     model = init_chat_model(
         model=os.getenv("MODEL_NAME", "gpt-4.1"),
@@ -46,13 +37,15 @@ async def create_agent(coral_tools, agent_tools):
         api_key=os.getenv("MODEL_API_KEY"),
         temperature=os.getenv("MODEL_TEMPERATURE", "0.1"),
         max_tokens=os.getenv("MODEL_MAX_TOKENS", "8000"),
-        base_url=os.getenv("MODEL_BASE_URL", None)
+        base_url=os.getenv("MODEL_BASE_URL", None),
     )
     agent = create_tool_calling_agent(model, combined_tools, prompt)
-    return AgentExecutor(agent=agent, tools=combined_tools, verbose=True, handle_parsing_errors=True)
+    return AgentExecutor(
+        agent=agent, tools=combined_tools, verbose=True, handle_parsing_errors=True
+    )
+
 
 async def main():
-
     runtime = os.getenv("CORAL_ORCHESTRATION_RUNTIME", None)
     if runtime is None:
         load_dotenv()
@@ -62,7 +55,7 @@ async def main():
 
     coral_params = {
         "agentId": agentID,
-        "agentDescription": "An agent that can scrape websites and provide easy to parse markdown"
+        "agentDescription": "An agent that can scrape websites and provide easy to parse markdown",
     }
 
     query_string = urllib.parse.urlencode(coral_params)
@@ -93,7 +86,9 @@ async def main():
     coral_tools = await client.get_tools(server_name="coral")
     agent_tools = await client.get_tools(server_name="firecrawl-mcp")
 
-    print(f"Coral tools count: {len(coral_tools)} and agent tools count: {len(agent_tools)}")
+    print(
+        f"Coral tools count: {len(coral_tools)} and agent tools count: {len(agent_tools)}"
+    )
 
     agent_executor = await create_agent(coral_tools, agent_tools)
 
@@ -107,6 +102,7 @@ async def main():
             print(f"Error in agent loop: {str(e)}")
             print(traceback.format_exc())
             await asyncio.sleep(5)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
