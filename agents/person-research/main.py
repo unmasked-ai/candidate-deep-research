@@ -22,10 +22,21 @@ async def create_agent(coral_tools, agent_tools):
         [
             (
                 "system",
-                f"""You are an agent interacting with the tools from Coral Server and having your own tools. Your task is to do deep research on a person, aggregating information from different sources such as LinkedIn, GitHub, personal portfolio website, and build a profile about a person. The exact persona and metrics may be defined by the instructions it receives from other agents, otherwise optimise for a candidate.
+                f"""You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
 
-            These are the list of coral tools: {coral_tools_description}
-            These are the list of your tools: {agent_tools_description}""",
+                Communication with other agents must occur in threads.  You can create a thread with the $CREATE_THREAD tool,
+                make sure to include the agents you want to communicate with in the thread.  It is possible to add agents to an existing
+                thread with the $ADD_PARTICIPANT tool.  If a thread has reached a conclusion or is no longer productive, you
+                can close the thread with the $CLOSE_THREAD tool.  It is very important to use the $SEND_MESSAGE 
+                tool to communicate in these threads as no other agent will see your messages otherwise!  If you have sent a message 
+                and expect or require a response from another agent, use the $WAIT_FOR_MENTIONS tool to wait for a response.
+
+                In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
+
+                Your task is to do deep research on a person, aggregating information from different sources such as LinkedIn, GitHub, personal portfolio website, and build a profile about a person. The exact persona and metrics may be defined by the instructions it receives from other agents, otherwise optimise for a candidate.
+
+                These are the list of coral tools: {coral_tools_description}
+                These are the list of your tools: {agent_tools_description}""",
             ),
             ("placeholder", "{agent_scratchpad}"),
         ]
@@ -62,8 +73,6 @@ async def main():
 
     CORAL_SERVER_URL = f"{base_url}?{query_string}"
     print(f"Connecting to Coral Server: {CORAL_SERVER_URL}")
-
-    print(f"APIFY_API_KEY: {os.getenv('APIFY_API_KEY')}")
 
     timeout = float(os.getenv("TIMEOUT_MS", "300"))
     client = MultiServerMCPClient(
