@@ -1,6 +1,6 @@
 import urllib.parse
 from dotenv import load_dotenv
-import os, json, asyncio, traceback
+import os, json, asyncio, traceback, copy
 from langchain.chat_models import init_chat_model
 from langchain.prompts import ChatPromptTemplate
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -13,28 +13,56 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+def prefix_tool_names(tools, agent_name):
+    """Prefix tool names with agent name to avoid conflicts across agents"""
+    prefixed_tools = []
+    for tool in tools:
+        # Create a copy of the tool
+        new_tool = copy.deepcopy(tool)
+        # Add agent prefix to tool name
+        new_tool.name = f"{agent_name}_{tool.name}"
+        prefixed_tools.append(new_tool)
+    return prefixed_tools
+
 
 async def create_agent(coral_tools, agent_tools):
-    coral_tools_description = get_tools_description(coral_tools)
+    # Prefix coral tool names to avoid conflicts with other agents
+    agent_name = "linkedin"
+    prefixed_coral_tools = prefix_tool_names(coral_tools, agent_name)
+
+    coral_tools_description = get_tools_description(prefixed_coral_tools)
     agent_tools_description = get_tools_description(agent_tools)
-    combined_tools = coral_tools + agent_tools
+    combined_tools = prefixed_coral_tools + agent_tools
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
                 f"""You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
 
-                Communication with other agents must occur in threads.  You can create a thread with the $CREATE_THREAD tool,
-                make sure to include the agents you want to communicate with in the thread.  It is possible to add agents to an existing
-                thread with the $ADD_PARTICIPANT tool.  If a thread has reached a conclusion or is no longer productive, you
-                can close the thread with the $CLOSE_THREAD tool.  It is very important to use the $SEND_MESSAGE 
-                tool to communicate in these threads as no other agent will see your messages otherwise!  If you have sent a message 
-                and expect or require a response from another agent, use the $WAIT_FOR_MENTIONS tool to wait for a response.
+                Communication with other agents must occur in threads. You can create a thread with the linkedin_coral_create_thread tool,
+                make sure to include the agents you want to communicate with in the thread. It is possible to add agents to an existing
+                thread with the linkedin_coral_add_participant tool. If a thread has reached a conclusion or is no longer productive, you
+                can close the thread with the linkedin_coral_close_thread tool. It is very important to use the linkedin_coral_send_message
+                tool to communicate in these threads as no other agent will see your messages otherwise! If you have sent a message
+                and expect or require a response from another agent, use the linkedin_coral_wait_for_mentions tool to wait for a response.
 
                 In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
 
                 Your task is to fetch data from LinkedIn, for both people and companies. This works for person/company name or LinkedIn URL.
-                
+
+                IMPORTANT FALLBACK STRATEGY:
+                If any Apify LinkedIn tools fail due to API limits, rate limits, or other errors, you should:
+                1. Acknowledge the limitation in your response
+                2. Suggest alternative research methods by delegating to other agents:
+                   - Use firecrawl agent for company website scraping
+                   - Use github agent for technical profiles
+                   - Use general web search capabilities
+                3. Provide any available cached or basic information you can gather
+                4. Always respond with something useful rather than just reporting the error
+
+                Example fallback response:
+                "I'm unable to access LinkedIn data due to API limits. However, I can coordinate with other agents to research [company/person] through their website, GitHub profile, and other public sources. Let me delegate this to the firecrawl agent for website research."
+
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",
             ),

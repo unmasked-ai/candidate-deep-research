@@ -1,6 +1,6 @@
 import urllib.parse
 from dotenv import load_dotenv
-import os, json, asyncio, traceback
+import os, json, asyncio, traceback, copy
 from langchain.chat_models import init_chat_model
 from langchain.prompts import ChatPromptTemplate
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -13,27 +13,109 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+def prefix_tool_names(tools, agent_name):
+    """Prefix tool names with agent name to avoid conflicts across agents"""
+    prefixed_tools = []
+    for tool in tools:
+        # Create a copy of the tool
+        new_tool = copy.deepcopy(tool)
+        # Add agent prefix to tool name
+        new_tool.name = f"{agent_name}_{tool.name}"
+        prefixed_tools.append(new_tool)
+    return prefixed_tools
+
 
 async def create_agent(coral_tools, agent_tools):
-    coral_tools_description = get_tools_description(coral_tools)
+    # Prefix coral tool names to avoid conflicts with other agents
+    agent_name = "person_research"
+    prefixed_coral_tools = prefix_tool_names(coral_tools, agent_name)
+
+    coral_tools_description = get_tools_description(prefixed_coral_tools)
     agent_tools_description = get_tools_description(agent_tools)
-    combined_tools = coral_tools + agent_tools
+    combined_tools = prefixed_coral_tools + agent_tools
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"""You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
+                f"""You are an agent that exists in a Coral multi agent system. You must communicate with other agents.
 
-                Communication with other agents must occur in threads.  You can create a thread with the $CREATE_THREAD tool,
-                make sure to include the agents you want to communicate with in the thread.  It is possible to add agents to an existing
-                thread with the $ADD_PARTICIPANT tool.  If a thread has reached a conclusion or is no longer productive, you
-                can close the thread with the $CLOSE_THREAD tool.  It is very important to use the $SEND_MESSAGE 
-                tool to communicate in these threads as no other agent will see your messages otherwise!  If you have sent a message 
-                and expect or require a response from another agent, use the $WAIT_FOR_MENTIONS tool to wait for a response.
+                Communication with other agents must occur in threads. You can create a thread with the person_research_coral_create_thread tool,
+                make sure to include the agents you want to communicate with in the thread. It is possible to add agents to an existing
+                thread with the person_research_coral_add_participant tool. If a thread has reached a conclusion or is no longer productive, you
+                can close the thread with the person_research_coral_close_thread tool. It is very important to use the person_research_coral_send_message
+                tool to communicate in these threads as no other agent will see your messages otherwise! If you have sent a message
+                and expect or require a response from another agent, use the person_research_coral_wait_for_mentions tool to wait for a response.
 
-                In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
+                In most cases assistant message output will not reach the user. Use tooling where possible to communicate with the user instead.
 
                 Your task is to do deep research on a person, aggregating information from different sources such as LinkedIn, GitHub, personal portfolio website, and build a profile about a person. The exact persona and metrics may be defined by the instructions it receives from other agents, otherwise optimise for a candidate.
+
+                MULTI-SOURCE RESEARCH STRATEGY:
+                1. LinkedIn research: Delegate to linkedin agent for professional background
+                2. GitHub research: Delegate to github agent for technical skills and projects
+                3. Web presence: Delegate to firecrawl agent for personal websites/portfolios
+                4. Synthesize all sources into comprehensive candidate profile
+
+                FALLBACK APPROACH when LinkedIn is unavailable:
+                - Focus heavily on GitHub activity and contributions
+                - Analyze personal website/portfolio content
+                - Search for public profiles and professional mentions
+                - Infer professional background from technical work and projects
+                - Always provide actionable insights even with limited data
+
+                CANDIDATE EVALUATION FOCUS:
+                - Technical skills and expertise level
+                - Project complexity and impact
+                - Professional experience indicators
+                - Communication and collaboration patterns
+                - Industry knowledge and specialization
+
+                OUTPUT FORMAT REQUIREMENT:
+                When asked to provide candidate profile for match evaluation, respond with XML in this format:
+                ```xml
+                <candidate_profile>
+                  <name>Candidate Name</name>
+                  <years_experience>5.0</years_experience>
+                  <current_title>Software Engineer</current_title>
+                  <skills>
+                    <skill>python</skill>
+                    <skill>react</skill>
+                    <skill>kubernetes</skill>
+                  </skills>
+                  <certifications>
+                    <certification>AWS Certified</certification>
+                  </certifications>
+                  <education>
+                    <degree>BS Computer Science</degree>
+                  </education>
+                  <roles_history>
+                    <role>Software Engineer at Company X</role>
+                    <role>Developer at Company Y</role>
+                  </roles_history>
+                  <locations>
+                    <type>remote</type>
+                    <cities>
+                      <city>San Francisco</city>
+                    </cities>
+                  </locations>
+                  <salary_expectation>
+                    <currency>USD</currency>
+                    <min>80000</min>
+                    <max>120000</max>
+                    <period>year</period>
+                  </salary_expectation>
+                  <industry_experience>
+                    <industry>tech</industry>
+                    <industry>fintech</industry>
+                  </industry_experience>
+                </candidate_profile>
+                ```
+
+                WORKFLOW INTEGRATION:
+                - When interface agent requests candidate research, gather comprehensive profile data
+                - Structure output as CandidateProfile XML for match-evaluation agent
+                - Include all available information even if some fields are null/empty
+                - Reply with structured XML when research is complete
 
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",

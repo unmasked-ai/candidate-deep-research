@@ -1,6 +1,6 @@
 import urllib.parse
 from dotenv import load_dotenv
-import os, json, asyncio, traceback
+import os, json, asyncio, traceback, copy
 from typing import Optional, List
 from pydantic import BaseModel, Field, ValidationError
 from langchain.chat_models import init_chat_model
@@ -87,16 +87,31 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+def prefix_tool_names(tools, agent_name):
+    """Prefix tool names with agent name to avoid conflicts across agents"""
+    prefixed_tools = []
+    for tool in tools:
+        # Create a copy of the tool
+        new_tool = copy.deepcopy(tool)
+        # Add agent prefix to tool name
+        new_tool.name = f"{agent_name}_{tool.name}"
+        prefixed_tools.append(new_tool)
+    return prefixed_tools
+
 async def create_agent(coral_tools, local_tools, company_research_agent_id: str):
-    coral_tools_description = get_tools_description(coral_tools)
+    # Prefix coral tool names to avoid conflicts with other agents
+    agent_name = "role_requirements_builder"
+    prefixed_coral_tools = prefix_tool_names(coral_tools, agent_name)
+
+    coral_tools_description = get_tools_description(prefixed_coral_tools)
     local_tools_description = get_tools_description(local_tools)
-    combined_tools = coral_tools + local_tools
+    combined_tools = prefixed_coral_tools + local_tools
 
     COMPANY_RESEARCH_AGENT_ID = company_research_agent_id
 
     prompt = ChatPromptTemplate.from_messages([
         ("system",
-f"""
+"""
 You are the **Job Requirement Builder Agent**.
 
 Inputs you will receive (as a JSON string in the mention content):
@@ -105,14 +120,14 @@ Inputs you will receive (as a JSON string in the mention content):
 
 Goal:
 1) Parse the JD into a partial spec (fields listed below).
-2) If company_linkedin_url is present, request enrichment from the **Company Research Agent** (agentId="{ {COMPANY_RESEARCH_AGENT_ID} }"):
-   - Send a Coral `send_message` in the SAME thread with content:
+2) If company_linkedin_url is present, request enrichment from the **Company Research Agent** (agentId="{company_research_agent_id}"):
+   - Send a Coral message using `role_requirements_builder_coral_send_message` in the SAME thread with content:
      {{
        "action":"company_snapshot",
        "company_linkedin_url":"<url>",
        "need_fields":["industry","culture_signals","locations","salary_benchmarks","common_tech_stack"]
      }}
-   - Then call `wait_for_mentions` repeatedly (short timeouts ok) UNTIL you receive a reply in the SAME thread FROM that agent. Expect JSON content with any of those fields.
+   - Then call `role_requirements_builder_coral_wait_for_mentions` repeatedly (short timeouts ok) UNTIL you receive a reply in the SAME thread FROM that agent. Expect JSON content with any of those fields.
 3) Merge the JD parse + company snapshot into a single dict.
 4) Call the local tool **standardise_spec** with that dict to get the final JobSpec JSON.
 5) Reply to the ORIGINAL sender in the SAME thread with ONLY that JSON.
@@ -140,7 +155,11 @@ Local validation tools:
 {local_tools_description}
 """),
         ("placeholder", "{agent_scratchpad}")
-    ])
+    ]).partial(
+        company_research_agent_id=company_research_agent_id,
+        coral_tools_description=coral_tools_description,
+        local_tools_description=local_tools_description
+    )
 
     model = init_chat_model(
         model=os.getenv("MODEL_NAME", "gpt-4.1"),

@@ -1,6 +1,6 @@
 import urllib.parse
 from dotenv import load_dotenv
-import os, json, asyncio, traceback
+import os, json, asyncio, traceback, copy
 from langchain.chat_models import init_chat_model
 from langchain.prompts import ChatPromptTemplate
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -13,75 +13,107 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+def prefix_tool_names(tools, agent_name):
+    """Prefix tool names with agent name to avoid conflicts across agents"""
+    prefixed_tools = []
+    for tool in tools:
+        # Create a copy of the tool
+        new_tool = copy.deepcopy(tool)
+        # Add agent prefix to tool name
+        new_tool.name = f"{agent_name}_{tool.name}"
+        prefixed_tools.append(new_tool)
+    return prefixed_tools
+
 
 async def create_agent(coral_tools, agent_tools):
-    coral_tools_description = get_tools_description(coral_tools)
+    # Prefix coral tool names to avoid conflicts with other agents
+    agent_name = "company_research"
+    prefixed_coral_tools = prefix_tool_names(coral_tools, agent_name)
+
+    coral_tools_description = get_tools_description(prefixed_coral_tools)
     agent_tools_description = get_tools_description(agent_tools)
-    combined_tools = coral_tools + agent_tools
-    prompt = ChatPromptTemplate.from_messages([
-    ("system", f"""
-You are the **Company Research Agent** in a Coral multi-agent system.
+    combined_tools = prefixed_coral_tools + agent_tools
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                f"""You are an agent that exists in a Coral multi agent system. You must communicate with other agents.
 
-# Input
-You will be mentioned with JSON content like:
-{{
-  "company_linkedin_url": "https://www.linkedin.com/company/..."
-}}
+                Communication with other agents must occur in threads. You can create a thread with the company_research_coral_create_thread tool,
+                make sure to include the agents you want to communicate with in the thread. It is possible to add agents to an existing
+                thread with the company_research_coral_add_participant tool. If a thread has reached a conclusion or is no longer productive, you
+                can close the thread with the company_research_coral_close_thread tool. It is very important to use the company_research_coral_send_message
+                tool to communicate in these threads as no other agent will see your messages otherwise! If you have sent a message
+                and expect or require a response from another agent, use the company_research_coral_wait_for_mentions tool to wait for a response.
 
-If the URL is missing or malformed, immediately reply with:
-{{"error":"invalid_input","details":"company_linkedin_url required or malformed"}}
-and stop.
+                In most cases assistant message output will not reach the user. Use tooling where possible to communicate with the user instead.
 
-# Your mission
-- Obtain a single, reliable snapshot of the company **from LinkedIn only**.
-- You are allowed to communicate with **the LinkedIn agent only**. Do not contact any other agent or tool.
-- You must perform **exactly one** request to the LinkedIn agent, then **wait exactly once** for its reply in the same thread.
+                Your task is to do deep research on companies given their company name or LinkedIn URL, providing details such as company size, industry, and location.
 
-# Communication rules (STRICT)
-- Use the same thread you were mentioned in.
-- If needed, add the LinkedIn agent as a participant, then send **one** message to it:
-  {{
-    "action": "scrape_and_summarize_company",
-    "linkedin_url": "<the company_linkedin_url>"
-  }}
-- After sending, call `wait_for_mentions` **once** to receive its reply.
-- If no reply arrives within the timeout, respond with:
-  {{"error":"upstream_timeout","details":"No reply from LinkedIn agent"}}
-- Do **not** retry, loop, or contact anyone else.
+                RESEARCH STRATEGY:
+                1. First, try to delegate LinkedIn research to the linkedin agent
+                2. If LinkedIn research fails (due to API limits or other issues), coordinate with other agents:
+                   - firecrawl agent: for company website analysis
+                   - github agent: for technical/engineering information
+                   - person-research agent: for key personnel research
+                3. Synthesize information from multiple sources to provide comprehensive company insights
+                4. Always provide useful information even if some sources are unavailable
 
-# Output
-Respond to the original sender with **ONLY** a compact JSON object.
-All fields are optional; include them only if supported by the LinkedIn reply. You may add extra useful fields when clearly justified.
+                FALLBACK APPROACH:
+                When LinkedIn data is unavailable, focus on:
+                - Company website content and structure
+                - Public repositories and technical presence
+                - News and public information
+                - Industry context and competitive landscape
 
-Known fields:
-- name: string
-- linkedin: string  (echo the input URL)
-- culture: string | string[]
-- tech_stack: string[]
-- benefits: string[]
-- keywords: string[]
-- industry: string
-- salary_range: {{
-    "currency": string,
-    "min": number | null,
-    "max": number | null,
-    "period": "year" | "month"
-  }} | null
-- location: string | string[]
+                OUTPUT FORMAT REQUIREMENT:
+                When asked to provide company profile for match evaluation, respond with XML in this format:
+                ```xml
+                <company_profile>
+                  <name>Company Name</name>
+                  <industry>Technology</industry>
+                  <locations>
+                    <location>San Francisco</location>
+                    <location>New York</location>
+                  </locations>
+                  <culture_values>
+                    <value>innovation</value>
+                    <value>collaboration</value>
+                    <value>diversity</value>
+                  </culture_values>
+                  <tech_stack>
+                    <technology>python</technology>
+                    <technology>react</technology>
+                    <technology>kubernetes</technology>
+                  </tech_stack>
+                  <salary_benchmarks>
+                    <currency>USD</currency>
+                    <min>90000</min>
+                    <max>150000</max>
+                    <period>year</period>
+                  </salary_benchmarks>
+                  <culture_fit>
+                    <score>75</score>
+                    <notes>
+                      <note>Fast-paced environment</note>
+                      <note>Remote-friendly</note>
+                    </notes>
+                  </culture_fit>
+                </company_profile>
+                ```
 
-Normalization & discipline:
-- Do **not** guess. If unknown/absent, use null (scalars) or [] (lists).
-- Keep items short and atomic (e.g., "postgresql" → "postgres").
-- You may include an optional "sources" array like:
-  [{{"source":"linkedin","note":"headline/about/locations"}}]
-- Do **not** include long quotes or non-LinkedIn sources.
+                WORKFLOW INTEGRATION:
+                - When interface agent requests company research, gather comprehensive company data
+                - Structure output as CompanyProfile XML for match-evaluation agent
+                - Include culture fit assessment when possible
+                - Reply with structured XML when research is complete
 
-# Allowed tools (reference)
-Use Coral messaging primitives (create/add participants if needed), `send_message`, and `wait_for_mentions`. No other tools or agents are permitted.
-"""),
-    ("placeholder", "{agent_scratchpad}")
-])
-
+                These are the list of coral tools: {coral_tools_description}
+                These are the list of your tools: {agent_tools_description}""",
+            ),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
 
     print(f"MODEL_API_KEY {os.getenv('MODEL_API_KEY')}")
 
@@ -132,7 +164,7 @@ async def main():
     print("Multi Server Connection Established")
 
     coral_tools = await client.get_tools(server_name="coral")
-    agent_tools = await client.get_tools(server_name="coral")
+    agent_tools = []
 
     print(
         f"Coral tools count: {len(coral_tools)} and agent tools count: {len(agent_tools)}"

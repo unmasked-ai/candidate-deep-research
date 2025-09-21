@@ -1,6 +1,6 @@
 import urllib.parse
 from dotenv import load_dotenv
-import os, json, asyncio, traceback
+import os, json, asyncio, traceback, copy
 from langchain.chat_models import init_chat_model
 from langchain.prompts import ChatPromptTemplate
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -13,27 +13,77 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+def prefix_tool_names(tools, agent_name):
+    """Prefix tool names with agent name to avoid conflicts across agents"""
+    prefixed_tools = []
+    for tool in tools:
+        # Create a copy of the tool
+        new_tool = copy.deepcopy(tool)
+        # Add agent prefix to tool name
+        new_tool.name = f"{agent_name}_{tool.name}"
+        prefixed_tools.append(new_tool)
+    return prefixed_tools
+
 
 async def create_agent(coral_tools, agent_tools):
-    coral_tools_description = get_tools_description(coral_tools)
+    # Prefix coral tool names to avoid conflicts with other agents
+    agent_name = "firecrawl"
+    prefixed_coral_tools = prefix_tool_names(coral_tools, agent_name)
+
+    coral_tools_description = get_tools_description(prefixed_coral_tools)
     agent_tools_description = get_tools_description(agent_tools)
-    combined_tools = coral_tools + agent_tools
+    combined_tools = prefixed_coral_tools + agent_tools
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
                 f"""You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
 
-                Communication with other agents must occur in threads.  You can create a thread with the $CREATE_THREAD tool,
-                make sure to include the agents you want to communicate with in the thread.  It is possible to add agents to an existing
-                thread with the $ADD_PARTICIPANT tool.  If a thread has reached a conclusion or is no longer productive, you
-                can close the thread with the $CLOSE_THREAD tool.  It is very important to use the $SEND_MESSAGE 
-                tool to communicate in these threads as no other agent will see your messages otherwise!  If you have sent a message 
-                and expect or require a response from another agent, use the $WAIT_FOR_MENTIONS tool to wait for a response.
+                Communication with other agents must occur in threads. You can create a thread with the firecrawl_coral_create_thread tool,
+                make sure to include the agents you want to communicate with in the thread. It is possible to add agents to an existing
+                thread with the firecrawl_coral_add_participant tool. If a thread has reached a conclusion or is no longer productive, you
+                can close the thread with the firecrawl_coral_close_thread tool. It is very important to use the firecrawl_coral_send_message
+                tool to communicate in these threads as no other agent will see your messages otherwise! If you have sent a message
+                and expect or require a response from another agent, use the firecrawl_coral_wait_for_mentions tool to wait for a response.
 
                 In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
 
-                Your task is to do deep research on a person, aggregating information from different sources such as LinkedIn, GitHub, personal portfolio website, and build a profile about a person. The exact persona and metrics may be defined by the instructions it receives from other agents, otherwise optimise for a candidate.
+                Your task is to scrape and analyze websites to provide comprehensive information. You are particularly valuable when other research methods (like LinkedIn) are unavailable.
+
+                PRIMARY CAPABILITIES:
+                - Company website analysis (About pages, team pages, careers, press releases)
+                - Personal portfolio and professional website scraping
+                - Public profile pages and professional directories
+                - Technical blog posts and documentation sites
+                - Industry and competitive analysis from public websites
+
+                WHEN SERVING AS FALLBACK FOR LINKEDIN:
+                - Focus on company "About Us", "Team", "Careers" pages for company research
+                - Look for personal portfolios, GitHub Pages, professional bio pages for people
+                - Analyze content depth and quality to infer expertise levels
+                - Extract contact information and professional details when available
+                - Provide comprehensive summaries that complement missing LinkedIn data
+
+                NEWS WEBSITE SCRAPING (e.g., BBC, CNN, Reuters):
+                - Extract main headlines from homepage or news sections
+                - Look for article titles, summary text, and publication times
+                - Focus on current/recent news items (last 24-48 hours)
+                - Structure output as clean, numbered list of headlines
+                - Include brief descriptions if available
+                - Prioritize breaking news and top stories
+
+                RESPONSE FORMAT FOR NEWS HEADLINES:
+                ```
+                # Latest Headlines from [Website Name]
+
+                1. **[Headline 1]** - [Brief description if available]
+                2. **[Headline 2]** - [Brief description if available]
+                3. **[Headline 3]** - [Brief description if available]
+                ...
+
+                Source: [Website URL]
+                Scraped at: [Current time]
+                ```
 
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",
@@ -103,16 +153,42 @@ async def main():
 
     agent_executor = await create_agent(coral_tools, agent_tools)
 
-    while True:
+    # Check if we're in single-task mode (for testing) or continuous mode
+    single_task_mode = os.getenv("SINGLE_TASK_MODE", "false").lower() == "true"
+    max_iterations = 1 if single_task_mode else 50  # Limit iterations to prevent endless loops
+
+    iteration = 0
+    task_completed = False
+
+    print(f"Firecrawl agent starting: single_task_mode={single_task_mode}, max_iterations={max_iterations}")
+
+    while iteration < max_iterations and not task_completed:
         try:
-            print("Starting new agent invocation")
-            await agent_executor.ainvoke({"agent_scratchpad": []})
-            print("Completed agent invocation, restarting loop")
-            await asyncio.sleep(1)
+            iteration += 1
+            print(f"Starting agent invocation {iteration}/{max_iterations}")
+
+            result = await agent_executor.ainvoke({"agent_scratchpad": []})
+            print(f"Completed agent invocation {iteration}")
+
+            # In single task mode, complete after one iteration
+            if single_task_mode:
+                print("Single task mode - firecrawl agent completing after one iteration")
+                task_completed = True
+            else:
+                await asyncio.sleep(1)
+
         except Exception as e:
-            print(f"Error in agent loop: {str(e)}")
+            print(f"Error in agent loop iteration {iteration}: {str(e)}")
             print(traceback.format_exc())
             await asyncio.sleep(5)
+
+    # Agent execution completed
+    if task_completed:
+        print("Firecrawl agent task completed successfully")
+    else:
+        print(f"Firecrawl agent reached maximum iterations ({max_iterations})")
+
+    print("Firecrawl agent terminating gracefully")
 
 
 if __name__ == "__main__":
