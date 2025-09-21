@@ -154,7 +154,7 @@ Available Coral tools:
 Local validation tools:
 {local_tools_description}
 """),
-        ("placeholder", "{{agent_scratchpad}}")
+        ("placeholder", "{agent_scratchpad}")
     ]).partial(
         company_research_agent_id=company_research_agent_id,
         coral_tools_description=coral_tools_description,

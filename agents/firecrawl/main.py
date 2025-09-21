@@ -48,7 +48,21 @@ async def create_agent(coral_tools, agent_tools):
 
                 In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
 
-                Your task is to do deep research on a person, aggregating information from different sources such as LinkedIn, GitHub, personal portfolio website, and build a profile about a person. The exact persona and metrics may be defined by the instructions it receives from other agents, otherwise optimise for a candidate.
+                Your task is to scrape and analyze websites to provide comprehensive information. You are particularly valuable when other research methods (like LinkedIn) are unavailable.
+
+                PRIMARY CAPABILITIES:
+                - Company website analysis (About pages, team pages, careers, press releases)
+                - Personal portfolio and professional website scraping
+                - Public profile pages and professional directories
+                - Technical blog posts and documentation sites
+                - Industry and competitive analysis from public websites
+
+                WHEN SERVING AS FALLBACK FOR LINKEDIN:
+                - Focus on company "About Us", "Team", "Careers" pages for company research
+                - Look for personal portfolios, GitHub Pages, professional bio pages for people
+                - Analyze content depth and quality to infer expertise levels
+                - Extract contact information and professional details when available
+                - Provide comprehensive summaries that complement missing LinkedIn data
 
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",

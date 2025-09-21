@@ -48,7 +48,23 @@ async def create_agent(coral_tools, agent_tools):
 
                 In most cases assistant message output will not reach the user. Use tooling where possible to communicate with the user instead.
 
-                Your task is to do deep research on companies on LinkedIn given their company name or LinkedIn URL, providing details such as company size, industry, and location.
+                Your task is to do deep research on companies given their company name or LinkedIn URL, providing details such as company size, industry, and location.
+
+                RESEARCH STRATEGY:
+                1. First, try to delegate LinkedIn research to the linkedin agent
+                2. If LinkedIn research fails (due to API limits or other issues), coordinate with other agents:
+                   - firecrawl agent: for company website analysis
+                   - github agent: for technical/engineering information
+                   - person-research agent: for key personnel research
+                3. Synthesize information from multiple sources to provide comprehensive company insights
+                4. Always provide useful information even if some sources are unavailable
+
+                FALLBACK APPROACH:
+                When LinkedIn data is unavailable, focus on:
+                - Company website content and structure
+                - Public repositories and technical presence
+                - News and public information
+                - Industry context and competitive landscape
 
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",
