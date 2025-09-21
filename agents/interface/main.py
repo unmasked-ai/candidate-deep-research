@@ -157,20 +157,35 @@ async def get_user_input(runtime: str, agent_tools: Dict[str, Any]) -> str:
     )
 
     if runtime is not None:
-        print(f"[VERBOSE] Using runtime mode - invoking {REQUEST_QUESTION_TOOL} tool")
+        print(f"[VERBOSE] Using runtime mode - waiting for messages from Coral system")
         print(f"[VERBOSE] Available agent tools: {list(agent_tools.keys())}")
-        try:
-            print("[VERBOSE] Calling request_question tool with message prompt...")
-            user_input = await agent_tools[REQUEST_QUESTION_TOOL].ainvoke(
-                {"message": "How can I assist you today? "}
-            )
-            print(
-                f"[VERBOSE] Successfully received input from runtime tool: {len(str(user_input))} chars"
-            )
-        except Exception as e:
-            print(f"[VERBOSE] ERROR: Failed to invoke request_question tool: {str(e)}")
-            logger.error(f"Error invoking request_question tool: {str(e)}")
-            raise
+
+        # Check if we have the wait_for_mentions tool (with prefix)
+        wait_tool_name = "interface_coral_wait_for_mentions"
+        if wait_tool_name in agent_tools:
+            try:
+                print(f"[VERBOSE] Calling {wait_tool_name} to wait for instructions...")
+                # Wait for messages from the Coral system - this should contain the research instructions
+                message_result = await agent_tools[wait_tool_name].ainvoke({"timeout": 30000})  # 30 second timeout
+                print(f"[VERBOSE] Received message from Coral system: {message_result}")
+
+                # Extract the actual instruction content from the message
+                if isinstance(message_result, dict) and "content" in message_result:
+                    user_input = message_result["content"]
+                elif isinstance(message_result, str):
+                    user_input = message_result
+                else:
+                    user_input = str(message_result)
+
+                print(f"[VERBOSE] Successfully received input from Coral system: {len(str(user_input))} chars")
+            except Exception as e:
+                print(f"[VERBOSE] ERROR: Failed to receive messages from Coral system: {str(e)}")
+                logger.error(f"Error waiting for Coral messages: {str(e)}")
+                # Fallback to default task
+                user_input = "Begin candidate research task as configured"
+        else:
+            print(f"[VERBOSE] Warning: {wait_tool_name} not found, using default task")
+            user_input = "Begin candidate research task as configured"
     else:
         print("[VERBOSE] Using interactive mode - prompting user directly")
         user_input = input("How can I assist you today? ").strip()
@@ -195,16 +210,27 @@ async def send_response(
     logger.info(f"Agent response: {response}")
 
     if runtime is not None:
-        print(f"[VERBOSE] Using runtime mode - invoking {ANSWER_QUESTION_TOOL} tool")
+        print(f"[VERBOSE] Using runtime mode - checking for send-research-result tool")
         print(f"[VERBOSE] Available agent tools: {list(agent_tools.keys())}")
-        try:
-            print("[VERBOSE] Calling answer_question tool with response...")
-            await agent_tools[ANSWER_QUESTION_TOOL].ainvoke({"response": response})
-            print("[VERBOSE] Successfully sent response via runtime tool")
-        except Exception as e:
-            print(f"[VERBOSE] ERROR: Failed to invoke answer_question tool: {str(e)}")
-            logger.error(f"Error invoking answer_question tool: {str(e)}")
-            raise
+
+        # Try to find the send-research-result tool (this is the custom tool from backend)
+        send_result_tool = None
+        for tool_name, tool in agent_tools.items():
+            if "send-research-result" in tool_name or tool_name == "send-research-result":
+                send_result_tool = tool
+                break
+
+        if send_result_tool:
+            try:
+                print("[VERBOSE] Calling send-research-result tool with response...")
+                await send_result_tool.ainvoke({"result": response})
+                print("[VERBOSE] Successfully sent response via send-research-result tool")
+            except Exception as e:
+                print(f"[VERBOSE] ERROR: Failed to invoke send-research-result tool: {str(e)}")
+                logger.error(f"Error invoking send-research-result tool: {str(e)}")
+                # Don't raise - just log the error and continue
+        else:
+            print("[VERBOSE] Warning: send-research-result tool not found - response logged only")
     else:
         print("[VERBOSE] Interactive mode - response logged only (no runtime tool)")
 
@@ -229,20 +255,20 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
                 "system",
                 f"""You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
 
-                Communication with other agents must occur in threads.  You can create a thread with the $CREATE_THREAD tool,
-                make sure to include the agents you want to communicate with in the thread.  It is possible to add agents to an existing
-                thread with the $ADD_PARTICIPANT tool.  If a thread has reached a conclusion or is no longer productive, you
-                can close the thread with the $CLOSE_THREAD tool.  It is very important to use the $SEND_MESSAGE 
-                tool to communicate in these threads as no other agent will see your messages otherwise!  If you have sent a message 
-                and expect or require a response from another agent, use the $WAIT_FOR_MENTIONS tool to wait for a response.
+                Communication with other agents must occur in threads. You can create a thread with the interface_coral_create_thread tool,
+                make sure to include the agents you want to communicate with in the thread. It is possible to add agents to an existing
+                thread with the interface_coral_add_participant tool. If a thread has reached a conclusion or is no longer productive, you
+                can close the thread with the interface_coral_close_thread tool. It is very important to use the interface_coral_send_message
+                tool to communicate in these threads as no other agent will see your messages otherwise! If you have sent a message
+                and expect or require a response from another agent, use the interface_coral_wait_for_mentions tool to wait for a response.
 
                 In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
-                
-                Your primary role is to plan tasks sent by the user and send clear instructions to other agents to execute them, focusing solely on questions about the Coral Server, its tools: {coral_tools_description}, and registered agents. 
-                Always use {{chat_history}} to understand the context of the question along with the user's instructions. 
-                Think carefully about the question, analyze its intent, and create a detailed plan to address it, considering the roles and capabilities of available agents, description and their tools. 
-                
-                You are tasked with analysising if this candidate is sutiable for the job by researching them. 
+
+                Your primary role is to plan tasks sent by the user and send clear instructions to other agents to execute them, focusing solely on questions about the Coral Server, its tools: {coral_tools_description}, and registered agents.
+                Always use {{chat_history}} to understand the context of the question along with the user's instructions.
+                Think carefully about the question, analyze its intent, and create a detailed plan to address it, considering the roles and capabilities of available agents, description and their tools.
+
+                You are tasked with analysising if this candidate is sutiable for the job by researching them.
                 Heres is their Linkedin: {query}
                 """,
             ),
@@ -333,22 +359,13 @@ async def main():
             print(f"[VERBOSE]   Tool {i + 1}: {tool.name}")
         logger.info(f"Retrieved {len(coral_tools)} coral tools")
 
-        print("[VERBOSE] Checking runtime mode and required tools...")
+        print("[VERBOSE] Checking runtime mode...")
         if config["runtime"] is not None:
-            print("[VERBOSE] Runtime mode detected - checking available tools...")
-            required_tools = [REQUEST_QUESTION_TOOL, ANSWER_QUESTION_TOOL]
+            print("[VERBOSE] Runtime mode detected - will wait for Coral system messages")
             available_tools = [tool.name for tool in coral_tools]
-            print(f"[VERBOSE] Required tools: {required_tools}")
             print(f"[VERBOSE] Available tools: {available_tools}")
-
-            # Check if required tools are available, but don't fail if missing
-            missing_tools = [tool for tool in required_tools if tool not in available_tools]
-            if missing_tools:
-                print(f"[VERBOSE] WARNING: Missing tools {missing_tools} - continuing with available tools")
-            else:
-                print("[VERBOSE] All required tools found")
         else:
-            print("[VERBOSE] Interactive mode - no runtime tool validation needed")
+            print("[VERBOSE] Interactive mode - will use direct user input")
 
         print("[VERBOSE] Creating agent tools dictionary...")
         agent_tools = {tool.name: tool for tool in coral_tools}

@@ -1,6 +1,6 @@
 import urllib.parse
 from dotenv import load_dotenv
-import os, json, asyncio, traceback
+import os, json, asyncio, traceback, copy
 from typing import Optional, List
 from pydantic import BaseModel, Field, ValidationError
 from langchain.chat_models import init_chat_model
@@ -426,10 +426,25 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+def prefix_tool_names(tools, agent_name):
+    """Prefix tool names with agent name to avoid conflicts across agents"""
+    prefixed_tools = []
+    for tool in tools:
+        # Create a copy of the tool
+        new_tool = copy.deepcopy(tool)
+        # Add agent prefix to tool name
+        new_tool.name = f"{agent_name}_{tool.name}"
+        prefixed_tools.append(new_tool)
+    return prefixed_tools
+
 async def create_agent(coral_tools, local_tools):
-    coral_tools_description = get_tools_description(coral_tools)
+    # Prefix coral tool names to avoid conflicts with other agents
+    agent_name = "match_evaluation"
+    prefixed_coral_tools = prefix_tool_names(coral_tools, agent_name)
+
+    coral_tools_description = get_tools_description(prefixed_coral_tools)
     local_tools_description = get_tools_description(local_tools)
-    combined_tools = coral_tools + local_tools
+    combined_tools = prefixed_coral_tools + local_tools
 
     prompt = ChatPromptTemplate.from_messages([
         ("system",

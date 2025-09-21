@@ -106,7 +106,7 @@ async def main():
     print("Multi Server Connection Established")
 
     coral_tools = await client.get_tools(server_name="coral")
-    agent_tools = await client.get_tools(server_name="coral")
+    agent_tools = []
 
     print(
         f"Coral tools count: {len(coral_tools)} and agent tools count: {len(agent_tools)}"
