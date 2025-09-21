@@ -1,11 +1,32 @@
 import urllib.parse
 from dotenv import load_dotenv
-import os, json, asyncio, traceback, copy
+import os, json, asyncio, traceback
 from langchain.chat_models import init_chat_model
 from langchain.prompts import ChatPromptTemplate
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.agents import create_tool_calling_agent, AgentExecutor
+from pydantic import BaseModel
+from typing import List
 
+# typing for making outputs structured in json format
+class SkilsScore(BaseModel):
+    skill: str
+    score: float
+    reason: str
+
+class GitHubReviewAgentOutput(BaseModel):
+    summary: str
+    bio: str
+    repos: int
+    skills: List[SkilsScore]
+    overall_score: float
+
+class ErrorOutput(BaseModel):
+    error: str
+    details: str
+
+output_json = json.dumps(GitHubReviewAgentOutput.model_json_schema(), indent=2)
+error_json = json.dumps(ErrorOutput.model_json_schema(), indent=2)
 
 def get_tools_description(tools):
     return "\n".join(
@@ -13,45 +34,89 @@ def get_tools_description(tools):
         for tool in tools
     )
 
-def prefix_tool_names(tools, agent_name):
-    """Prefix tool names with agent name to avoid conflicts across agents"""
-    prefixed_tools = []
-    for tool in tools:
-        # Create a copy of the tool
-        new_tool = copy.deepcopy(tool)
-        # Add agent prefix to tool name
-        new_tool.name = f"{agent_name}_{tool.name}"
-        prefixed_tools.append(new_tool)
-    return prefixed_tools
-
 
 async def create_agent(coral_tools, agent_tools):
-    # Prefix coral tool names to avoid conflicts with other agents
-    agent_name = "github"
-    prefixed_coral_tools = prefix_tool_names(coral_tools, agent_name)
-
-    coral_tools_description = get_tools_description(prefixed_coral_tools)
+    coral_tools_description = get_tools_description(coral_tools)
     agent_tools_description = get_tools_description(agent_tools)
-    combined_tools = prefixed_coral_tools + agent_tools
+    combined_tools = coral_tools + agent_tools
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"""You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
+                    
+                f"""    
+                # GitHub Review Agent (Coral)
 
-                Communication with other agents must occur in threads. You can create a thread with the github_coral_create_thread tool,
-                make sure to include the agents you want to communicate with in the thread. It is possible to add agents to an existing
-                thread with the github_coral_add_participant tool. If a thread has reached a conclusion or is no longer productive, you
-                can close the thread with the github_coral_close_thread tool. It is very important to use the github_coral_send_message
-                tool to communicate in these threads as no other agent will see your messages otherwise! If you have sent a message
-                and expect or require a response from another agent, use the github_coral_wait_for_mentions tool to wait for a response.
+- **Mode**: Reactive → wait for mentions via `coral_wait_for_mentions` before acting.  
+- **Inputs (JSON)**:
+  - `github_profile_url`: str  
+  - `max_repos`: int (default 3)  
+  - `competency_weights`: competency: weight, renormalize if given  
 
-                In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
+---
 
-                Your task is to create, update, and search for GitHub repositories and files, as well as view/edit issues and pull requests (depending on permissions)
+## Competencies  
+If job-specific list is missing, default to:
+- DevOps  
+- Testing  
+- Documentation  
+- Dependency Mgmt  
+- Security  
+- Performance  
 
-                These are the list of coral tools: {coral_tools_description}
-                These are the list of your tools: {agent_tools_description}""",
+---
+
+## Goal  
+Concise, evidence-backed GitHub review. **Output JSON only**.
+
+---
+
+## Strategy  
+
+### 1. Discovery  
+- Fetch repos (`per_page=100`, sort=updated, skip forks/archived/templates).  
+- Pick top `max_repos` with technical signals (workflows, configs, docs, container files).  
+
+### 2. Tree-first scan  
+- One tree call per repo. Score ~70% from structure/signals.  
+- Curiosity budget: 6 (2 if <100 rate limit).  
+
+### 3. Targeted deep dives  
+Spend budget only if signals found:  
+- **Config**: tsconfig, pyproject → strict/linting/typing.  
+- **Testing**: test dirs, CI configs.  
+- **DevOps**: Dockerfile, .dockerignore, security hints.  
+- **Docs**: README/docs/ADR → quality check.  
+- **Deps**: lockfiles + dependabot.  
+
+### 4. Stop smart  
+- Stop if budget gone or 2 useless fetches in a row.  
+
+---
+
+## Scoring  
+- Subscores ∈ [0,1].  
+- Weight with `competency_weights` (else defaults).  
+- `final_score = 100 * weighted sum`.  
+- Repo summary ≤240 chars.  
+- Evidence: 2–6 items (`file + reason`).  
+- Overall score = recency-weighted mean (1.0 <90d, 0.7 90–365d, 0.4 >365d).  
+
+---
+
+## After research ONLY after being asked to do so, output JSON  
+
+
+  "summary": "str",
+  "bio": "str",
+  "repos": int,
+  "skills": [
+    "skill": "str", "score": 0.0, "reason": "str"
+  ],
+  "overall_score": 0.0
+
+
+                """
             ),
             ("placeholder", "{agent_scratchpad}"),
         ]
