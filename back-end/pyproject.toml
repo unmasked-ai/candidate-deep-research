@@ -6,7 +6,7 @@ requires-python = ">=3.9"
 
 dependencies = [
     "fastapi",
-    "uvicorn",
+    "uvicorn[standard]",
     "httpx",
     "python-dotenv",
     "python-multipart",

@@ -59,3 +59,16 @@ export interface ApiError {
   message: string
   details?: any
 }
+
+// Candidate Profile Types
+export interface CandidateProfile {
+  name: string
+  current_title?: string
+  years_experience: number
+  industry_experience?: string[]
+  skills: string[]
+  education?: string[]
+  certifications?: string[]
+  location?: string
+  company?: string
+}

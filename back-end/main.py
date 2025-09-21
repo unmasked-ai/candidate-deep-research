@@ -1,14 +1,14 @@
 import os
 import tempfile
 import uuid
-from fastapi import FastAPI, Query, Body, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, Query, Body, HTTPException, File, UploadFile, Form, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncio
 from dotenv import load_dotenv
 import httpx
 import json
-from typing import Optional
+from typing import Optional, Dict, List
 
 load_dotenv()
 
@@ -58,25 +58,25 @@ agentGraphRequest = {
     "agents": [
         {},
         {
-            "id": {"name": "company-research", "version": "0.0.1"},
-            "name": "company-research",
-            "coralPlugins": [],
-            "provider": {"type": "local", "runtime": "executable"},
-            "blocking": True,
-            "options": {
-                "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY}
-            },
-            "customToolAccess": [],
-        },
-        {
-            "id": {"name": "linkedin", "version": "0.0.1"},
+            "id": {"name": "firecrawl", "version": "0.0.1"},
             "name": "firecrawl",
             "coralPlugins": [],
             "provider": {"type": "local", "runtime": "executable"},
             "blocking": True,
             "options": {
                 "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY},
-                "FIRECRAWL_API_KEY": {"type": "string", "value": FIRECRAWL_KEY},
+                "FIRECRAWL_API_KEY": {"type": "string", "value": FIRECRAWL_KEY}
+            },
+            "customToolAccess": [],
+        },
+        {
+            "id": {"name": "linkedin", "version": "0.0.1"},
+            "name": "linkedin",
+            "coralPlugins": [],
+            "provider": {"type": "local", "runtime": "executable"},
+            "blocking": True,
+            "options": {
+                "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY},
                 "APIFY_API_KEY": {"type": "string", "value": APIFY_API_KEY}
             },
             "customToolAccess": [],
@@ -144,6 +144,7 @@ agentGraphRequest = {
     "groups": [["interface",
                 "firecrawl",
                 "linkedin",
+                "github",
                 "person-research",
                 "company-research",
                 "role-requirements-builder",
@@ -159,8 +160,7 @@ def create_app_graph_request(query: str):
         "provider": {"type": "local", "runtime": "executable"},
         "blocking": True,
         "options": {
-            "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY},
-            "USER_REQUEST": {"type": "string", "value": query}
+            "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY}
         },
         "customToolAccess": ["search-result"],
     }
@@ -172,6 +172,7 @@ def create_app_graph_request(query: str):
 
 
 pending_researches: dict[str, asyncio.Future] = {}
+websocket_connections: Dict[str, List[WebSocket]] = {}
 
 @app.post("/research")
 async def search(q: str = Query(..., description="Research linkedin")):
@@ -470,9 +471,93 @@ async def health_check():
     return {"status": "healthy", "service": "candidate-research-api"}
 
 
+async def broadcast_to_websockets(research_id: str, message_type: str, data: dict):
+    """Broadcast a message to all WebSocket connections for a research ID"""
+    if research_id in websocket_connections:
+        connections = websocket_connections[research_id][:]  # Copy to avoid modification during iteration
+        message = {
+            "type": message_type,
+            "researchId": research_id,
+            "data": data,
+            "timestamp": str(asyncio.get_event_loop().time())
+        }
+
+        for websocket in connections:
+            try:
+                await websocket.send_json(message)
+            except Exception:
+                # Remove disconnected websockets
+                if websocket in websocket_connections[research_id]:
+                    websocket_connections[research_id].remove(websocket)
+
+@app.websocket("/ws/research/{research_id}")
+async def websocket_endpoint(websocket: WebSocket, research_id: str):
+    await websocket.accept()
+
+    # Add this connection to the research ID
+    if research_id not in websocket_connections:
+        websocket_connections[research_id] = []
+    websocket_connections[research_id].append(websocket)
+
+    try:
+        # Send initial status
+        if research_id in pending_researches:
+            future = pending_researches[research_id]
+            if future.done():
+                try:
+                    result = future.result()
+                    await websocket.send_json({
+                        "type": "completion",
+                        "researchId": research_id,
+                        "data": {"status": "completed", "results": result},
+                        "timestamp": str(asyncio.get_event_loop().time())
+                    })
+                except Exception as e:
+                    await websocket.send_json({
+                        "type": "error",
+                        "researchId": research_id,
+                        "data": {"status": "failed", "error": str(e)},
+                        "timestamp": str(asyncio.get_event_loop().time())
+                    })
+            else:
+                await websocket.send_json({
+                    "type": "stage_update",
+                    "researchId": research_id,
+                    "data": {"status": "processing", "stage": "initialization"},
+                    "timestamp": str(asyncio.get_event_loop().time())
+                })
+        else:
+            await websocket.send_json({
+                "type": "error",
+                "researchId": research_id,
+                "data": {"status": "not_found", "message": "Research not found"},
+                "timestamp": str(asyncio.get_event_loop().time())
+            })
+
+        # Keep connection alive
+        while True:
+            try:
+                await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        # Remove this connection
+        if research_id in websocket_connections and websocket in websocket_connections[research_id]:
+            websocket_connections[research_id].remove(websocket)
+
 @app.post("/mcp/research-result/{sessionId}/{agentId}")
 async def mcp_research_result(sessionId: str, agentId: str, body: ResearchResult):
     print("Got result from agent: ", body.result)
+
+    # Broadcast agent update to WebSocket connections
+    await broadcast_to_websockets(sessionId, "agent_status", {
+        "agent": agentId,
+        "currentTask": f"Received result from {agentId}",
+        "message": body.result
+    })
+
     # Lookup pending search by sessionId
     future = pending_researches.get(sessionId)
     if not future:
@@ -480,4 +565,9 @@ async def mcp_research_result(sessionId: str, agentId: str, body: ResearchResult
 
     if not future.done():
         future.set_result(body.result)
+        # Broadcast completion
+        await broadcast_to_websockets(sessionId, "completion", {
+            "status": "completed",
+            "results": body.result
+        })
     return "Success"
