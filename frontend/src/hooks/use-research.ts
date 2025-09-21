@@ -325,11 +325,17 @@ export const useProcessingUpdates = (researchId?: string) => {
           // Fetch results when completed
           await researchApi.getResearchResults(researchId)
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Polling error:', error)
+        // If backend returns 404 for this researchId (e.g., after server restart),
+        // stop polling and clear the current session so we don't auto-query.
+        if (error?.status === 404) {
+          clearInterval(pollInterval)
+          clearCurrentSession()
+        }
       }
     }, 3000) // Poll every 3 seconds
 
     return () => clearInterval(pollInterval)
-  }, [researchId, currentSession, updateProcessingState])
+  }, [researchId, currentSession, updateProcessingState, clearCurrentSession])
 }

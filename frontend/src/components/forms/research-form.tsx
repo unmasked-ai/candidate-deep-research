@@ -105,7 +105,7 @@ We offer competitive compensation, comprehensive benefits, and opportunities for
     }
 
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <Card>
           <CardHeader>
             <CardTitle>Research Form</CardTitle>
@@ -120,21 +120,23 @@ We offer competitive compensation, comprehensive benefits, and opportunities for
               className="space-y-6"
               noValidate
             >
-              <LinkedinUrlInput
-                value={watchedValues.linkedinUrl}
-                onChange={handleLinkedInUrlChange}
-                error={errors.linkedinUrl?.message}
-                disabled={isFormDisabled}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <LinkedinUrlInput
+                  value={watchedValues.linkedinUrl}
+                  onChange={handleLinkedInUrlChange}
+                  error={errors.linkedinUrl?.message}
+                  disabled={isFormDisabled}
+                />
 
-              <CvUpload
-                onFileSelect={handleCvFileChange}
-                selectedFile={watchedValues.cvFile}
-                error={errors.cvFile?.message}
-                disabled={isFormDisabled}
-                maxSizeBytes={10 * 1024 * 1024}
-                acceptedTypes={['.pdf', '.doc', '.docx', '.txt']}
-              />
+                <CvUpload
+                  onFileSelect={handleCvFileChange}
+                  selectedFile={watchedValues.cvFile}
+                  error={errors.cvFile?.message}
+                  disabled={isFormDisabled}
+                  maxSizeBytes={10 * 1024 * 1024}
+                  acceptedTypes={['.pdf', '.doc', '.docx', '.txt']}
+                />
+              </div>
 
               <JobDescriptionInput
                 textValue={watchedValues.jobDescription || ''}
@@ -147,10 +149,10 @@ We offer competitive compensation, comprehensive benefits, and opportunities for
                 disabled={isFormDisabled}
               />
 
-              <div className="pt-4">
+              <div className="pt-2">
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full md:w-auto"
                   size="lg"
                   disabled={isFormDisabled}
                 >

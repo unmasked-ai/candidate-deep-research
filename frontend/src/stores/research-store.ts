@@ -273,11 +273,23 @@ export const useResearchStore = create<ResearchStore>()(
       }),
       {
         name: 'research-store',
-        // Only persist sessions and basic state, not temporary UI state
+        version: 2,
+        // Remove currentSession from persistence to avoid auto-resuming/polling
         partialize: (state) => ({
           sessions: state.sessions,
-          currentSession: state.currentSession
-        })
+        }),
+        migrate: (persistedState: any, version) => {
+          // Clear any previously persisted currentSession
+          try {
+            const s = persistedState?.state ?? persistedState
+            if (s && 'currentSession' in s) {
+              s.currentSession = null
+            }
+            return persistedState
+          } catch {
+            return persistedState
+          }
+        }
       }
     ),
     {

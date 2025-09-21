@@ -6,6 +6,7 @@ import { ToastProvider, useToast } from '@/components/ui/toast'
 import { useResearch, useProcessingUpdates } from '@/hooks'
 import { getUserFriendlyErrorMessage } from '@/utils/error-handling'
 import type { CandidateProfile } from '@/types'
+import { Branding } from '@/components/branding'
 
 const AppContent = () => {
   const {
@@ -136,10 +137,11 @@ const AppContent = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-12">
+      <Branding />
+      <div className="container mx-auto py-8">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-foreground mb-4">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-foreground mb-2">
             Candidate Research Portal
           </h1>
           <p className="text-muted-foreground text-lg">
