@@ -170,7 +170,7 @@ async def main():
         f"Firecrawl agent starting: single_task_mode={single_task_mode}, max_iterations={max_iterations}"
     )
 
-    while iteration < max_iterations and not task_completed:
+    while True:
         try:
             iteration += 1
             print(f"Starting agent invocation {iteration}/{max_iterations}")

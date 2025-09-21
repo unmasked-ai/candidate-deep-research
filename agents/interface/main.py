@@ -166,22 +166,35 @@ async def get_user_input(runtime: str, agent_tools: Dict[str, Any]) -> str:
     initial_request_tool = "interface_get-initial-request"
     if runtime is not None and initial_request_tool in agent_tools:
         try:
-            print(f"[VERBOSE] Calling {initial_request_tool} to retrieve initial research data...")
+            print(
+                f"[VERBOSE] Calling {initial_request_tool} to retrieve initial research data..."
+            )
             initial_result = await agent_tools[initial_request_tool].ainvoke({})
             print(f"[VERBOSE] Initial request tool result: {initial_result}")
 
             # Extract research data from the response
             if isinstance(initial_result, dict) and "research_data" in initial_result:
                 research_data = initial_result["research_data"]
-                if research_data and research_data != "No initial research data available":
-                    print(f"[VERBOSE] Successfully retrieved initial research data: {len(research_data)} chars")
+                if (
+                    research_data
+                    and research_data != "No initial research data available"
+                ):
+                    print(
+                        f"[VERBOSE] Successfully retrieved initial research data: {len(research_data)} chars"
+                    )
                     return research_data
                 else:
-                    print(f"[VERBOSE] No initial research data available, falling back to Coral messages")
+                    print(
+                        f"[VERBOSE] No initial research data available, falling back to Coral messages"
+                    )
             else:
-                print(f"[VERBOSE] Unexpected response format from initial request tool: {initial_result}")
+                print(
+                    f"[VERBOSE] Unexpected response format from initial request tool: {initial_result}"
+                )
         except Exception as e:
-            print(f"[VERBOSE] ERROR: Failed to retrieve initial research data: {str(e)}")
+            print(
+                f"[VERBOSE] ERROR: Failed to retrieve initial research data: {str(e)}"
+            )
             logger.error(f"Error getting initial research data: {str(e)}")
 
     if runtime is not None:
@@ -194,7 +207,9 @@ async def get_user_input(runtime: str, agent_tools: Dict[str, Any]) -> str:
             try:
                 print(f"[VERBOSE] Calling {wait_tool_name} to wait for instructions...")
                 # Wait for messages from the Coral system - this should contain the research instructions
-                message_result = await agent_tools[wait_tool_name].ainvoke({"timeout": 30000})  # 30 second timeout
+                message_result = await agent_tools[wait_tool_name].ainvoke(
+                    {"timeout": 30000}
+                )  # 30 second timeout
                 print(f"[VERBOSE] Received message from Coral system: {message_result}")
 
                 # Extract the actual instruction content from the message
@@ -205,9 +220,13 @@ async def get_user_input(runtime: str, agent_tools: Dict[str, Any]) -> str:
                 else:
                     user_input = str(message_result)
 
-                print(f"[VERBOSE] Successfully received input from Coral system: {len(str(user_input))} chars")
+                print(
+                    f"[VERBOSE] Successfully received input from Coral system: {len(str(user_input))} chars"
+                )
             except Exception as e:
-                print(f"[VERBOSE] ERROR: Failed to receive messages from Coral system: {str(e)}")
+                print(
+                    f"[VERBOSE] ERROR: Failed to receive messages from Coral system: {str(e)}"
+                )
                 logger.error(f"Error waiting for Coral messages: {str(e)}")
                 # Fallback to default task
                 user_input = "Begin candidate research task as configured"
@@ -244,7 +263,10 @@ async def send_response(
         # Try to find the send-research-result tool (this is the custom tool from backend)
         send_result_tool = None
         for tool_name, tool in agent_tools.items():
-            if "send-research-result" in tool_name or tool_name == "send-research-result":
+            if (
+                "send-research-result" in tool_name
+                or tool_name == "send-research-result"
+            ):
                 send_result_tool = tool
                 break
 
@@ -252,13 +274,19 @@ async def send_response(
             try:
                 print("[VERBOSE] Calling send-research-result tool with response...")
                 await send_result_tool.ainvoke({"result": response})
-                print("[VERBOSE] Successfully sent response via send-research-result tool")
+                print(
+                    "[VERBOSE] Successfully sent response via send-research-result tool"
+                )
             except Exception as e:
-                print(f"[VERBOSE] ERROR: Failed to invoke send-research-result tool: {str(e)}")
+                print(
+                    f"[VERBOSE] ERROR: Failed to invoke send-research-result tool: {str(e)}"
+                )
                 logger.error(f"Error invoking send-research-result tool: {str(e)}")
                 # Don't raise - just log the error and continue
         else:
-            print("[VERBOSE] Warning: send-research-result tool not found - response logged only")
+            print(
+                "[VERBOSE] Warning: send-research-result tool not found - response logged only"
+            )
     else:
         print("[VERBOSE] Interactive mode - response logged only (no runtime tool)")
 
@@ -275,7 +303,7 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
     )
 
     query = os.getenv("USER_REQUEST")
-    
+
     print("[VERBOSE] Creating chat prompt template...")
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -298,9 +326,8 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
                 1. **Parse Input**: Extract candidate LinkedIn URL and job description
                 2. **Role Requirements**: Create thread with role-requirements-builder agent to standardize job spec
                 3. **Person Research**: Create thread with person-research agent to profile candidate
-                4. **Company Research**: Create thread with company-research agent for company context
-                5. **Match Evaluation**: Create thread with match-evaluation agent for final scoring - WAIT for match-evaluation to send score back to you
-                6. **Deliver Results**: Receive final score from match-evaluation agent and send to user via send-research-result
+                4. **Match Evaluation**: Create thread with match-evaluation agent for final scoring - WAIT for match-evaluation to send score back to you
+                5. **Deliver Results**: Receive final score from match-evaluation agent and send to user via send-research-result
 
                 REQUIRED THREAD COORDINATION:
                 - Create separate threads for each phase
@@ -376,7 +403,10 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
         "[VERBOSE] Creating agent executor with verbose=True and return_intermediate_steps=True"
     )
     executor = AgentExecutor(
-        agent=agent, tools=prefixed_coral_tools, verbose=True, return_intermediate_steps=True
+        agent=agent,
+        tools=prefixed_coral_tools,
+        verbose=True,
+        return_intermediate_steps=True,
     )
     print("[VERBOSE] Agent executor created successfully")
 
@@ -424,7 +454,9 @@ async def main():
 
         print("[VERBOSE] Checking runtime mode...")
         if config["runtime"] is not None:
-            print("[VERBOSE] Runtime mode detected - will wait for Coral system messages")
+            print(
+                "[VERBOSE] Runtime mode detected - will wait for Coral system messages"
+            )
             available_tools = [tool.name for tool in coral_tools]
             print(f"[VERBOSE] Available tools: {available_tools}")
         else:
@@ -446,7 +478,9 @@ async def main():
 
         # Check if we're in single-task mode (for testing) or continuous mode
         single_task_mode = os.getenv("SINGLE_TASK_MODE", "false").lower() == "true"
-        max_iterations = 1 if single_task_mode else 10  # Limit iterations even in continuous mode
+        max_iterations = (
+            1 if single_task_mode else 10
+        )  # Limit iterations even in continuous mode
 
         loop_iteration = 0
         task_completed = False
@@ -454,7 +488,9 @@ async def main():
         while loop_iteration < max_iterations and not task_completed:
             try:
                 loop_iteration += 1
-                print(f"[VERBOSE] --- Task iteration {loop_iteration} (max: {max_iterations}) ---")
+                print(
+                    f"[VERBOSE] --- Task iteration {loop_iteration} (max: {max_iterations}) ---"
+                )
 
                 print("[VERBOSE] Getting user input...")
                 user_input = await get_user_input(config["runtime"], agent_tools)
@@ -537,7 +573,9 @@ async def main():
         if task_completed:
             print("[VERBOSE] ========== TASK COMPLETED SUCCESSFULLY ==========")
         else:
-            print(f"[VERBOSE] ========== MAXIMUM ITERATIONS ({max_iterations}) REACHED ==========")
+            print(
+                f"[VERBOSE] ========== MAXIMUM ITERATIONS ({max_iterations}) REACHED =========="
+            )
 
         print(f"[VERBOSE] Final iteration count: {loop_iteration}")
         print("[VERBOSE] Interface agent terminating gracefully")

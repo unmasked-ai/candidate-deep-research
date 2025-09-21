@@ -38,27 +38,12 @@ async def create_agent(coral_tools, agent_tools):
         [
             (
                 "system",
-                f"""Your task is to do deep research on a person, aggregating information from different sources such as LinkedIn, GitHub, personal portfolio website, and build a profile about a person. The exact persona and metrics may be defined by the instructions it receives from other agents, otherwise optimise for a candidate.
+                f"""Your task is to do deep research on a person, collecting information from LinkedIn, GitHub, and build a profile about a person. The exact persona and metrics may be defined by the instructions it receives from other agents, otherwise optimise for a candidate.
 
-                MULTI-SOURCE RESEARCH STRATEGY:
-                1. LinkedIn research: Delegate to linkedin agent for professional background
-                2. GitHub research: Delegate to github agent for technical skills and projects
-                3. Web presence: Delegate to firecrawl agent for personal websites/portfolios
-                4. Synthesize all sources into comprehensive candidate profile
-
-                FALLBACK APPROACH when LinkedIn is unavailable:
-                - Focus heavily on GitHub activity and contributions
-                - Analyze personal website/portfolio content
-                - Search for public profiles and professional mentions
-                - Infer professional background from technical work and projects
-                - Always provide actionable insights even with limited data
-
-                CANDIDATE EVALUATION FOCUS:
-                - Technical skills and expertise level
-                - Project complexity and impact
-                - Professional experience indicators
-                - Communication and collaboration patterns
-                - Industry knowledge and specialization
+                STEPS:
+                1. LinkedIn research: Delegate to linkedin agent for professional background. Skip if no LinkedIn found
+                2. Synthesize all sources into comprehensive candidate profile
+                3. Return the combined person profile to the sender agent.
 
                 OUTPUT FORMAT REQUIREMENT:
                 When asked to provide candidate profile for match evaluation, respond with XML in this format:
@@ -100,12 +85,6 @@ async def create_agent(coral_tools, agent_tools):
                   </industry_experience>
                 </candidate_profile>
                 ```
-
-                WORKFLOW INTEGRATION:
-                - When interface agent requests candidate research, gather comprehensive profile data
-                - Structure output as CandidateProfile XML for match-evaluation agent
-                - Include all available information even if some fields are null/empty
-                - Reply with structured XML when research is complete
 
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",

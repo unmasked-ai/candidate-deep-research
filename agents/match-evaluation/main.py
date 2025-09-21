@@ -612,6 +612,8 @@ async def create_agent(coral_tools, local_tools):
                 f"""
 You are the **Match Evaluation Agent**.
 
+You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
+
 **IMPORTANT**
 You must wait until you are mentioned in a thread by another agent before taking action, calling the `coral_wait_for_mentions` function.
 

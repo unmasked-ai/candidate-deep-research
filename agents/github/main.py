@@ -59,7 +59,7 @@ async def create_agent(coral_tools, agent_tools):
 - **Inputs (JSON)**:
   - `github_profile_url`: str  
   - `max_repos`: int (default 3)  
-  - `competency_weights`: competency: weight, renormalize if given  
+  - `hard_skills'`: List[str] (optional) 
 
 ---
 
@@ -89,26 +89,15 @@ Concise, evidence-backed GitHub review. **Output JSON only**.
 - One tree call per repo. Score ~70% from structure/signals.  
 - Curiosity budget: 1.  
 
-### 3. Targeted deep dives  
-Spend budget only if signals found:  
-- **Config**: tsconfig, pyproject → strict/linting/typing.  
-- **Testing**: test dirs, CI configs.  
-- **DevOps**: Dockerfile, .dockerignore, security hints.  
-- **Docs**: README/docs/ADR → quality check.  
-- **Deps**: lockfiles + dependabot.  
 
-### 4. Stop smart  
-- Stop if budget gone or 2 useless fetches in a row.  
 
 ---
 
 ## Scoring  
-- Subscores ∈ [0,1].  
-- Weight with `competency_weights` (else defaults).  
-- `final_score = 100 * weighted sum`.  
+- Subscores ∈ [0,1].    
+- `final_score = 100 * mean of skills`.  
 - Repo summary ≤240 chars.  
-- Evidence: 2–6 items (`file + reason`).  
-- Overall score = recency-weighted mean (1.0 <90d, 0.7 90–365d, 0.4 >365d).  
+- Output overall score based on importance + final score
 
 ---
 
