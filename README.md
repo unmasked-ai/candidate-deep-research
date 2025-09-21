@@ -7,6 +7,8 @@
 
 This is a candidate research application that demonstrates the power of multi-agent orchestration using the Coral Protocol. The app allows users to input candidate information and generates comprehensive research reports through coordinated AI agents.
 
+This repository contains the complete application stack including the frontend, backend, and Coral server components.
+
 ### App Functionality
 1. **User Input**: Users provide candidate details through the interface
 2. **Multi-Agent Research**: The system orchestrates multiple specialized agents via Coral to gather comprehensive information
