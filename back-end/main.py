@@ -120,8 +120,8 @@ agentGraphRequest = {
             "customToolAccess": [],
         },
         {
-            "id": {"name": "role-requirements-builder", "version": "0.0.1"},
-            "name": "role-requirements-builder",
+            "id": {"name": "job-requirements-builder", "version": "0.0.1"},
+            "name": "job-requirements-builder",
             "coralPlugins": [],
             "provider": {"type": "local", "runtime": "executable"},
             "blocking": True,
@@ -147,7 +147,7 @@ agentGraphRequest = {
                 "github",
                 "person-research",
                 "company-research",
-                "role-requirements-builder",
+                "job-requirements-builder",
                 "match-evaluation"]],
     "customTools": customTools
 }
@@ -269,10 +269,10 @@ CV CONTENT:
 JOB DESCRIPTION:
 {job_description}
 
-Please analyze this candidate's fit for the role by:
+Please analyze this candidate's fit for the job by:
 1. Extracting candidate information from LinkedIn and CV
-2. Researching the target company and role requirements
-3. Building detailed role requirements from the job description
+2. Researching the target company and job requirements
+3. Building detailed job requirements from the job description
 4. Conducting final match evaluation with scoring
 
 Provide a detailed match evaluation with scores, justification, and recommendations.
@@ -524,7 +524,7 @@ async def health_check():
 # Test endpoint for complete candidate research workflow
 class CandidateResearchTestRequest(BaseModel):
     candidate_linkedin_url: str = "https://linkedin.com/in/john-doe"
-    job_description: str = "Senior Software Engineer role requiring Python, React, and 5+ years experience"
+    job_description: str = "Senior Software Engineer job requiring Python, React, and 5+ years experience"
     company_linkedin_url: Optional[str] = "https://linkedin.com/company/tech-company"
     single_task_mode: bool = True
 
@@ -546,7 +546,7 @@ Company LinkedIn: {request.company_linkedin_url or "Not provided"}
 
 Required workflow:
 1. Parse inputs and extract candidate/job information
-2. Create job specification using role-requirements-builder
+2. Create job specification using job-requirements-builder
 3. Research candidate profile using person-research agent
 4. Research company profile using company-research agent
 5. Generate final match evaluation with score and justification using match-evaluation agent
@@ -575,8 +575,8 @@ CRITICAL: Complete the full workflow and provide final match score and justifica
                     "customToolAccess": ["search-result"]
                 },
                 {
-                    "id": {"name": "role-requirements-builder", "version": "0.0.1"},
-                    "name": "role-requirements-builder",
+                    "id": {"name": "job-requirements-builder", "version": "0.0.1"},
+                    "name": "job-requirements-builder",
                     "coralPlugins": [],
                     "provider": {"type": "local", "runtime": "executable"},
                     "blocking": True,

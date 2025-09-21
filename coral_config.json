@@ -53,10 +53,10 @@
       },
       {
         "id": {
-          "name": "role-requirements-builder",
+          "name": "job-requirements-builder",
           "version": "0.0.1"
         },
-        "name": "role-requirements-builder",
+        "name": "job-requirements-builder",
         "coralPlugins": [],
         "provider": {
           "type": "local",
@@ -130,7 +130,7 @@
         "interface",
         "person-research",
         "company-research",
-        "role-requirements-builder",
+        "job-requirements-builder",
         "linkedin"
       ]
     ]

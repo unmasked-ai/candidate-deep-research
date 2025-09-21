@@ -219,7 +219,7 @@ class CompleteWorkflowTest:
             print("❌ Workflow timed out")
 
         # Check 3: All required agents configured
-        required_agents = ["interface", "role-requirements-builder", "person-research", "company-research", "match-evaluation"]
+        required_agents = ["interface", "job-requirements-builder", "person-research", "company-research", "match-evaluation"]
         validation_result["validations"]["all_agents_configured"] = True
         print(f"✓ All required agents configured: {', '.join(required_agents)}")
 
@@ -229,7 +229,7 @@ class CompleteWorkflowTest:
 
         # Expected outputs from workflow
         validation_result["expected_outputs"] = {
-            "job_spec": "Structured job requirements from role-requirements-builder",
+            "job_spec": "Structured job requirements from job-requirements-builder",
             "candidate_profile": "Detailed candidate information from person-research",
             "company_profile": "Company culture and context from company-research",
             "match_score": "Final score (0-100) from match-evaluation agent",
@@ -248,7 +248,7 @@ class CompleteWorkflowTest:
             print("🎉 WORKFLOW TEST PASSED!")
             print("\n✅ Expected Workflow Execution:")
             print("  1. Interface agent orchestrated the complete research workflow")
-            print("  2. Role-requirements-builder standardized the job specification")
+            print("  2. Job-requirements-builder standardized the job specification")
             print("  3. Person-research built comprehensive candidate profile")
             print("  4. Company-research analyzed company culture and context")
             print("  5. Match-evaluation calculated final scores and justification")
