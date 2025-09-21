@@ -7,6 +7,10 @@ description = "Agent that can do deep research on a person, aggregating informat
 type = "string"
 description = "API key for the model provider"
 
+[options.APIFY_API_KEY]
+type = "string"
+description = "API key for Apify scraping services"
+
 [options.MODEL_NAME]
 type = "string"
 description = "What model to use (e.g 'gpt-4.1')"
