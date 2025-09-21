@@ -156,6 +156,34 @@ async def get_user_input(runtime: str, agent_tools: Dict[str, Any]) -> str:
         f"[VERBOSE] Starting user input retrieval. Runtime mode: {runtime is not None}"
     )
 
+    # Check if we have a USER_REQUEST environment variable for testing
+    user_request = os.getenv("USER_REQUEST")
+    if user_request:
+        print(f"[VERBOSE] Using USER_REQUEST from environment: {user_request}")
+        return user_request
+
+    # Check if we have the get-initial-request custom tool (for Coral sessions)
+    initial_request_tool = "interface_get-initial-request"
+    if runtime is not None and initial_request_tool in agent_tools:
+        try:
+            print(f"[VERBOSE] Calling {initial_request_tool} to retrieve initial research data...")
+            initial_result = await agent_tools[initial_request_tool].ainvoke({})
+            print(f"[VERBOSE] Initial request tool result: {initial_result}")
+
+            # Extract research data from the response
+            if isinstance(initial_result, dict) and "research_data" in initial_result:
+                research_data = initial_result["research_data"]
+                if research_data and research_data != "No initial research data available":
+                    print(f"[VERBOSE] Successfully retrieved initial research data: {len(research_data)} chars")
+                    return research_data
+                else:
+                    print(f"[VERBOSE] No initial research data available, falling back to Coral messages")
+            else:
+                print(f"[VERBOSE] Unexpected response format from initial request tool: {initial_result}")
+        except Exception as e:
+            print(f"[VERBOSE] ERROR: Failed to retrieve initial research data: {str(e)}")
+            logger.error(f"Error getting initial research data: {str(e)}")
+
     if runtime is not None:
         print(f"[VERBOSE] Using runtime mode - waiting for messages from Coral system")
         print(f"[VERBOSE] Available agent tools: {list(agent_tools.keys())}")
@@ -264,12 +292,47 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
 
                 In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
 
-                Your primary role is to plan tasks sent by the user and send clear instructions to other agents to execute them, focusing solely on questions about the Coral Server, its tools: {coral_tools_description}, and registered agents.
-                Always use {{chat_history}} to understand the context of the question along with the user's instructions.
-                Think carefully about the question, analyze its intent, and create a detailed plan to address it, considering the roles and capabilities of available agents, description and their tools.
+                Your primary role is to orchestrate the complete candidate research workflow that produces a final match score and justification.
 
-                You are tasked with analysising if this candidate is sutiable for the job by researching them.
-                Heres is their Linkedin: {query}
+                CANDIDATE RESEARCH WORKFLOW (Execute in this order):
+                1. **Parse Input**: Extract candidate LinkedIn URL and job description
+                2. **Role Requirements**: Create thread with role-requirements-builder agent to standardize job spec
+                3. **Person Research**: Create thread with person-research agent to profile candidate
+                4. **Company Research**: Create thread with company-research agent for company context
+                5. **Match Evaluation**: Create thread with match-evaluation agent for final scoring - WAIT for match-evaluation to send score back to you
+                6. **Deliver Results**: Receive final score from match-evaluation agent and send to user via send-research-result
+
+                REQUIRED THREAD COORDINATION:
+                - Create separate threads for each phase
+                - Wait for each agent to complete before proceeding to next phase
+                - Pass results between phases (job spec → candidate profile → company profile → match evaluation)
+                - Ensure match-evaluation agent receives all required inputs
+                - WAIT for match-evaluation to send final score back to you
+                - When you receive the final score, immediately send it to user via send-research-result
+
+                INPUT REQUIREMENTS:
+                - Candidate LinkedIn URL or profile information
+                - Job description for role requirements
+                - Company information (if available)
+
+                IMPORTANT: If you do not have these specific inputs, ask the user to provide them.
+                Do NOT attempt to gather general information or news from other agents.
+
+                FINAL OUTPUT REQUIREMENT:
+                You MUST ensure the workflow culminates in a match-evaluation agent producing:
+                - Overall match score (0-100)
+                - Sub-scores (skills, experience, culture, domain, logistics)
+                - Decision (proceed/maybe/reject)
+                - Detailed justification
+                - Supporting evidence
+
+                CRITICAL:
+                - Only execute candidate research workflow when you have specific candidate research inputs
+                - Do not call other agents (like firecrawl) for general tasks or news gathering
+                - Do not endlessly chat. Follow the workflow, get the match score, deliver results, and complete.
+
+                Available tools: {coral_tools_description}
+                Current task: {query if query else "Execute candidate research workflow"}
                 """,
             ),
             ("human", "{user_input}"),
@@ -379,16 +442,28 @@ async def main():
         chat_history: List[Dict[str, str]] = []
         print(f"[VERBOSE] Chat history initialized (max size: {MAX_CHAT_HISTORY})")
 
-        print("[VERBOSE] ========== ENTERING MAIN LOOP ==========")
-        loop_iteration = 0
+        print("[VERBOSE] ========== ENTERING TASK EXECUTION ==========")
 
-        while True:
+        # Check if we're in single-task mode (for testing) or continuous mode
+        single_task_mode = os.getenv("SINGLE_TASK_MODE", "false").lower() == "true"
+        max_iterations = 1 if single_task_mode else 10  # Limit iterations even in continuous mode
+
+        loop_iteration = 0
+        task_completed = False
+
+        while loop_iteration < max_iterations and not task_completed:
             try:
                 loop_iteration += 1
-                print(f"[VERBOSE] --- Loop iteration {loop_iteration} ---")
+                print(f"[VERBOSE] --- Task iteration {loop_iteration} (max: {max_iterations}) ---")
 
                 print("[VERBOSE] Getting user input...")
                 user_input = await get_user_input(config["runtime"], agent_tools)
+
+                # Check for task completion signals
+                if user_input.lower() in ["exit", "quit", "done", "complete"]:
+                    print("[VERBOSE] Task completion signal received")
+                    task_completed = True
+                    break
 
                 print("[VERBOSE] Formatting chat history...")
                 formatted_history = format_chat_history(chat_history)
@@ -435,10 +510,16 @@ async def main():
                         f"[VERBOSE] Removed entry preview: {removed['user_input'][:50]}..."
                     )
 
-                print(f"[VERBOSE] Sleeping for {SLEEP_INTERVAL} seconds...")
-                await asyncio.sleep(SLEEP_INTERVAL)
+                # In single task mode, complete after processing one request
+                if single_task_mode:
+                    print("[VERBOSE] Single task mode - completing after one iteration")
+                    task_completed = True
+                else:
+                    print(f"[VERBOSE] Sleeping for {SLEEP_INTERVAL} seconds...")
+                    await asyncio.sleep(SLEEP_INTERVAL)
+
                 print(
-                    f"[VERBOSE] Loop iteration {loop_iteration} completed successfully"
+                    f"[VERBOSE] Task iteration {loop_iteration} completed successfully"
                 )
 
             except Exception as e:
@@ -451,6 +532,15 @@ async def main():
                     f"[VERBOSE] Sleeping for {ERROR_RETRY_INTERVAL} seconds before retry..."
                 )
                 await asyncio.sleep(ERROR_RETRY_INTERVAL)
+
+        # Task execution completed
+        if task_completed:
+            print("[VERBOSE] ========== TASK COMPLETED SUCCESSFULLY ==========")
+        else:
+            print(f"[VERBOSE] ========== MAXIMUM ITERATIONS ({max_iterations}) REACHED ==========")
+
+        print(f"[VERBOSE] Final iteration count: {loop_iteration}")
+        print("[VERBOSE] Interface agent terminating gracefully")
 
     except Exception as e:
         print(f"[VERBOSE] FATAL ERROR in main function: {str(e)}")

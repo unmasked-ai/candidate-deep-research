@@ -11,4 +11,5 @@ dependencies = [
     "python-dotenv",
     "python-multipart",
     "pydantic",
+    "aiohttp>=3.12.15",
 ]

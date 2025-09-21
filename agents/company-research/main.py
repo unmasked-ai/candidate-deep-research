@@ -66,6 +66,48 @@ async def create_agent(coral_tools, agent_tools):
                 - News and public information
                 - Industry context and competitive landscape
 
+                OUTPUT FORMAT REQUIREMENT:
+                When asked to provide company profile for match evaluation, respond with XML in this format:
+                ```xml
+                <company_profile>
+                  <name>Company Name</name>
+                  <industry>Technology</industry>
+                  <locations>
+                    <location>San Francisco</location>
+                    <location>New York</location>
+                  </locations>
+                  <culture_values>
+                    <value>innovation</value>
+                    <value>collaboration</value>
+                    <value>diversity</value>
+                  </culture_values>
+                  <tech_stack>
+                    <technology>python</technology>
+                    <technology>react</technology>
+                    <technology>kubernetes</technology>
+                  </tech_stack>
+                  <salary_benchmarks>
+                    <currency>USD</currency>
+                    <min>90000</min>
+                    <max>150000</max>
+                    <period>year</period>
+                  </salary_benchmarks>
+                  <culture_fit>
+                    <score>75</score>
+                    <notes>
+                      <note>Fast-paced environment</note>
+                      <note>Remote-friendly</note>
+                    </notes>
+                  </culture_fit>
+                </company_profile>
+                ```
+
+                WORKFLOW INTEGRATION:
+                - When interface agent requests company research, gather comprehensive company data
+                - Structure output as CompanyProfile XML for match-evaluation agent
+                - Include culture fit assessment when possible
+                - Reply with structured XML when research is complete
+
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",
             ),

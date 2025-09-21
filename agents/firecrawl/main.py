@@ -64,6 +64,27 @@ async def create_agent(coral_tools, agent_tools):
                 - Extract contact information and professional details when available
                 - Provide comprehensive summaries that complement missing LinkedIn data
 
+                NEWS WEBSITE SCRAPING (e.g., BBC, CNN, Reuters):
+                - Extract main headlines from homepage or news sections
+                - Look for article titles, summary text, and publication times
+                - Focus on current/recent news items (last 24-48 hours)
+                - Structure output as clean, numbered list of headlines
+                - Include brief descriptions if available
+                - Prioritize breaking news and top stories
+
+                RESPONSE FORMAT FOR NEWS HEADLINES:
+                ```
+                # Latest Headlines from [Website Name]
+
+                1. **[Headline 1]** - [Brief description if available]
+                2. **[Headline 2]** - [Brief description if available]
+                3. **[Headline 3]** - [Brief description if available]
+                ...
+
+                Source: [Website URL]
+                Scraped at: [Current time]
+                ```
+
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",
             ),
@@ -132,16 +153,42 @@ async def main():
 
     agent_executor = await create_agent(coral_tools, agent_tools)
 
-    while True:
+    # Check if we're in single-task mode (for testing) or continuous mode
+    single_task_mode = os.getenv("SINGLE_TASK_MODE", "false").lower() == "true"
+    max_iterations = 1 if single_task_mode else 50  # Limit iterations to prevent endless loops
+
+    iteration = 0
+    task_completed = False
+
+    print(f"Firecrawl agent starting: single_task_mode={single_task_mode}, max_iterations={max_iterations}")
+
+    while iteration < max_iterations and not task_completed:
         try:
-            print("Starting new agent invocation")
-            await agent_executor.ainvoke({"agent_scratchpad": []})
-            print("Completed agent invocation, restarting loop")
-            await asyncio.sleep(1)
+            iteration += 1
+            print(f"Starting agent invocation {iteration}/{max_iterations}")
+
+            result = await agent_executor.ainvoke({"agent_scratchpad": []})
+            print(f"Completed agent invocation {iteration}")
+
+            # In single task mode, complete after one iteration
+            if single_task_mode:
+                print("Single task mode - firecrawl agent completing after one iteration")
+                task_completed = True
+            else:
+                await asyncio.sleep(1)
+
         except Exception as e:
-            print(f"Error in agent loop: {str(e)}")
+            print(f"Error in agent loop iteration {iteration}: {str(e)}")
             print(traceback.format_exc())
             await asyncio.sleep(5)
+
+    # Agent execution completed
+    if task_completed:
+        print("Firecrawl agent task completed successfully")
+    else:
+        print(f"Firecrawl agent reached maximum iterations ({max_iterations})")
+
+    print("Firecrawl agent terminating gracefully")
 
 
 if __name__ == "__main__":

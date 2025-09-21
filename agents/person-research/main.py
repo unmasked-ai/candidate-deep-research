@@ -70,6 +70,53 @@ async def create_agent(coral_tools, agent_tools):
                 - Communication and collaboration patterns
                 - Industry knowledge and specialization
 
+                OUTPUT FORMAT REQUIREMENT:
+                When asked to provide candidate profile for match evaluation, respond with XML in this format:
+                ```xml
+                <candidate_profile>
+                  <name>Candidate Name</name>
+                  <years_experience>5.0</years_experience>
+                  <current_title>Software Engineer</current_title>
+                  <skills>
+                    <skill>python</skill>
+                    <skill>react</skill>
+                    <skill>kubernetes</skill>
+                  </skills>
+                  <certifications>
+                    <certification>AWS Certified</certification>
+                  </certifications>
+                  <education>
+                    <degree>BS Computer Science</degree>
+                  </education>
+                  <roles_history>
+                    <role>Software Engineer at Company X</role>
+                    <role>Developer at Company Y</role>
+                  </roles_history>
+                  <locations>
+                    <type>remote</type>
+                    <cities>
+                      <city>San Francisco</city>
+                    </cities>
+                  </locations>
+                  <salary_expectation>
+                    <currency>USD</currency>
+                    <min>80000</min>
+                    <max>120000</max>
+                    <period>year</period>
+                  </salary_expectation>
+                  <industry_experience>
+                    <industry>tech</industry>
+                    <industry>fintech</industry>
+                  </industry_experience>
+                </candidate_profile>
+                ```
+
+                WORKFLOW INTEGRATION:
+                - When interface agent requests candidate research, gather comprehensive profile data
+                - Structure output as CandidateProfile XML for match-evaluation agent
+                - Include all available information even if some fields are null/empty
+                - Reply with structured XML when research is complete
+
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",
             ),

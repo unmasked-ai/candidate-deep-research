@@ -7,6 +7,7 @@ from pydantic import BaseModel
 import asyncio
 from dotenv import load_dotenv
 import httpx
+import aiohttp
 import json
 from typing import Optional, Dict, List
 
@@ -51,24 +52,27 @@ customTools = {
             "required": ["result"]
           }
         }
+    },
+    "send-initial-request": {
+        "transport": {
+            "type": "http",
+            "url": THIS_HOST + "/mcp/send-initial-request"
+        },
+        "toolSchema": {
+          "name": "get-initial-request",
+          "description": "Retrieve the initial research request with candidate data for this session.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        }
     }
 }
 # we use the same agent graph, so lets keep it here
 agentGraphRequest = {
     "agents": [
         {},
-        {
-            "id": {"name": "firecrawl", "version": "0.0.1"},
-            "name": "firecrawl",
-            "coralPlugins": [],
-            "provider": {"type": "local", "runtime": "executable"},
-            "blocking": True,
-            "options": {
-                "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY},
-                "FIRECRAWL_API_KEY": {"type": "string", "value": FIRECRAWL_KEY}
-            },
-            "customToolAccess": [],
-        },
         {
             "id": {"name": "linkedin", "version": "0.0.1"},
             "name": "linkedin",
@@ -139,7 +143,6 @@ agentGraphRequest = {
         },
     ],
     "groups": [["interface",
-                "firecrawl",
                 "linkedin",
                 "github",
                 "person-research",
@@ -149,7 +152,7 @@ agentGraphRequest = {
     "customTools": customTools
 }
 
-def create_app_graph_request(query: str):
+def create_app_graph_request():
     interface_agent = {
         "id": {"name": "interface", "version": "0.0.1"},
         "name": "interface",
@@ -159,7 +162,7 @@ def create_app_graph_request(query: str):
         "options": {
             "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY}
         },
-        "customToolAccess": ["search-result"],
+        "customToolAccess": ["search-result", "send-initial-request"],
     }
     final_req = agentGraphRequest
     final_req["agents"][0] = interface_agent
@@ -170,6 +173,7 @@ def create_app_graph_request(query: str):
 
 pending_researches: dict[str, asyncio.Future] = {}
 websocket_connections: Dict[str, List[WebSocket]] = {}
+initial_requests: dict[str, str] = {}  # Store initial research data by session ID
 
 @app.post("/research")
 async def search(q: str = Query(..., description="Research linkedin")):
@@ -180,7 +184,7 @@ async def search(q: str = Query(..., description="Research linkedin")):
         "privacyKey": "priv",
         "applicationId": "app",
         "sessionId": "",
-        "agentGraphRequest": create_app_graph_request(q),
+        "agentGraphRequest": create_app_graph_request(),
     }
     print("PAYLOAD")
     print(json.dumps(payload, indent=4))
@@ -192,6 +196,11 @@ async def search(q: str = Query(..., description="Research linkedin")):
             future_id = data.get("sessionId")
         except httpx.RequestError as e:
             print(f"Error sending POST to http://todo/: {e}")
+
+    # Store initial research data for interface agent
+    if future_id:
+        initial_requests[future_id] = q
+        print(f"Stored initial research data for session {future_id}")
 
     loop = asyncio.get_event_loop()
     future = loop.create_future()
@@ -376,7 +385,7 @@ async def submit_research(
         "privacyKey": "priv",
         "applicationId": "app",
         "sessionId": research_id,
-        "agentGraphRequest": create_app_graph_request(research_query),
+        "agentGraphRequest": create_app_graph_request(),
     }
 
     # Submit to Coral server
@@ -416,6 +425,10 @@ async def submit_research(
                     status_code=500,
                     detail=f"Coral server did not return sessionId: {data}"
                 )
+
+        # Store initial research data for interface agent
+        initial_requests[session_id] = research_query
+        print(f"Stored initial research data for session {session_id}")
 
         # Set up future for this research
         loop = asyncio.get_event_loop()
@@ -506,6 +519,162 @@ async def cancel_research(research_id: str):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "candidate-research-api"}
+
+
+# Test endpoint for complete candidate research workflow
+class CandidateResearchTestRequest(BaseModel):
+    candidate_linkedin_url: str = "https://linkedin.com/in/john-doe"
+    job_description: str = "Senior Software Engineer role requiring Python, React, and 5+ years experience"
+    company_linkedin_url: Optional[str] = "https://linkedin.com/company/tech-company"
+    single_task_mode: bool = True
+
+@app.post("/api/test/candidate-research")
+async def test_candidate_research_workflow(request: CandidateResearchTestRequest):
+    """Test endpoint for complete candidate research workflow"""
+    try:
+        print(f"[TEST] Received candidate research test request")
+        print(f"[TEST] Candidate: {request.candidate_linkedin_url}")
+        print(f"[TEST] Job: {request.job_description}")
+
+        # Create test prompt for interface agent
+        test_prompt = f"""
+Execute complete candidate research workflow:
+
+Candidate LinkedIn: {request.candidate_linkedin_url}
+Job Description: {request.job_description}
+Company LinkedIn: {request.company_linkedin_url or "Not provided"}
+
+Required workflow:
+1. Parse inputs and extract candidate/job information
+2. Create job specification using role-requirements-builder
+3. Research candidate profile using person-research agent
+4. Research company profile using company-research agent
+5. Generate final match evaluation with score and justification using match-evaluation agent
+6. Return complete results to user
+
+CRITICAL: Complete the full workflow and provide final match score and justification. Do not endlessly chat between agents.
+"""
+
+        # Create a special research session for testing
+        session_id = str(uuid.uuid4())
+
+        # Create agent graph request with all necessary agents for candidate research
+        agent_graph_request = {
+            "agents": [
+                {
+                    "id": {"name": "interface", "version": "0.0.1"},
+                    "name": "interface",
+                    "coralPlugins": [],
+                    "provider": {"type": "local", "runtime": "executable"},
+                    "blocking": True,
+                    "options": {
+                        "MODEL_API_KEY": {"type": "string", "value": os.getenv("MODEL_API_KEY", "")},
+                        "SINGLE_TASK_MODE": {"type": "string", "value": "true" if request.single_task_mode else "false"},
+                        "USER_REQUEST": {"type": "string", "value": test_prompt}
+                    },
+                    "customToolAccess": ["search-result"]
+                },
+                {
+                    "id": {"name": "role-requirements-builder", "version": "0.0.1"},
+                    "name": "role-requirements-builder",
+                    "coralPlugins": [],
+                    "provider": {"type": "local", "runtime": "executable"},
+                    "blocking": True,
+                    "options": {
+                        "MODEL_API_KEY": {"type": "string", "value": os.getenv("MODEL_API_KEY", "")},
+                        "COMPANY_RESEARCH_AGENT_ID": {"type": "string", "value": "company-research"}
+                    },
+                    "customToolAccess": []
+                },
+                {
+                    "id": {"name": "person-research", "version": "0.0.1"},
+                    "name": "person-research",
+                    "coralPlugins": [],
+                    "provider": {"type": "local", "runtime": "executable"},
+                    "blocking": True,
+                    "options": {
+                        "MODEL_API_KEY": {"type": "string", "value": os.getenv("MODEL_API_KEY", "")}
+                    },
+                    "customToolAccess": []
+                },
+                {
+                    "id": {"name": "company-research", "version": "0.0.1"},
+                    "name": "company-research",
+                    "coralPlugins": [],
+                    "provider": {"type": "local", "runtime": "executable"},
+                    "blocking": True,
+                    "options": {
+                        "MODEL_API_KEY": {"type": "string", "value": os.getenv("MODEL_API_KEY", "")}
+                    },
+                    "customToolAccess": []
+                },
+                {
+                    "id": {"name": "match-evaluation", "version": "0.0.1"},
+                    "name": "match-evaluation",
+                    "coralPlugins": [],
+                    "provider": {"type": "local", "runtime": "executable"},
+                    "blocking": True,
+                    "options": {
+                        "MODEL_API_KEY": {"type": "string", "value": os.getenv("MODEL_API_KEY", "")}
+                    },
+                    "customToolAccess": []
+                }
+            ],
+            "groups": [["interface", "role-requirements-builder", "person-research", "company-research", "match-evaluation"]],
+            "customTools": {
+                "search-result": {
+                    "transport": {"type": "http", "url": "http://localhost:8000/mcp/search-result"},
+                    "toolSchema": {
+                        "name": "send-research-result",
+                        "description": "Send a single result of your research. You can call this multiple times as you find more info.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {"result": {"type": "string", "description": "The text of the result, as markdown"}},
+                            "required": ["result"]
+                        }
+                    }
+                }
+            }
+        }
+
+        # Submit to Coral server
+        coral_payload = {
+            "privacyKey": "priv",
+            "applicationId": "app",
+            "sessionId": session_id,
+            "agentGraphRequest": agent_graph_request
+        }
+
+        print(f"[TEST] Submitting test request to Coral server")
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "http://localhost:5555/api/v1/sessions",
+                json=coral_payload,
+                headers={"Content-Type": "application/json"}
+            ) as response:
+                if response.status == 200:
+                    coral_response = await response.json()
+                    test_session_id = coral_response.get("sessionId", session_id)
+                    print(f"[TEST] Successfully created test session: {test_session_id}")
+
+                    return {
+                        "test_session_id": test_session_id,
+                        "status": "test_started",
+                        "message": "Complete candidate research workflow initiated",
+                        "candidate": request.candidate_linkedin_url,
+                        "job_description": request.job_description,
+                        "expected_output": "Final match score and justification from match-evaluation agent",
+                        "note": "Monitor Coral server logs for agent workflow execution"
+                    }
+                else:
+                    error_text = await response.text()
+                    print(f"[TEST] Coral server error: {response.status} - {error_text}")
+                    raise HTTPException(status_code=500, detail=f"Coral server error: {error_text}")
+
+    except Exception as e:
+        print(f"[TEST] Error in test endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Test failed: {str(e)}")
 
 
 async def broadcast_to_websockets(research_id: str, message_type: str, data: dict):
@@ -608,3 +777,17 @@ async def mcp_research_result(sessionId: str, agentId: str, body: ResearchResult
             "results": body.result
         })
     return "Success"
+
+@app.post("/mcp/send-initial-request/{sessionId}/{agentId}")
+async def mcp_send_initial_request(sessionId: str, agentId: str):
+    """MCP endpoint for interface agent to retrieve initial research data"""
+    print(f"Agent {agentId} requesting initial data for session {sessionId}")
+
+    # Check if we have initial request data for this session
+    initial_data = initial_requests.get(sessionId)
+    if not initial_data:
+        # Return empty if no initial data available
+        return {"research_data": "No initial research data available"}
+
+    print(f"Sending initial research data to agent {agentId}: {initial_data[:100]}...")
+    return {"research_data": initial_data}
