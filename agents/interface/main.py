@@ -4,6 +4,7 @@ import os
 import json
 import asyncio
 import logging
+import copy
 from typing import List, Dict, Any
 from langchain.chat_models import init_chat_model
 from langchain.prompts import ChatPromptTemplate
@@ -22,6 +23,18 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+def prefix_tool_names(tools, agent_name):
+    """Prefix tool names with agent name to avoid conflicts across agents"""
+    prefixed_tools = []
+    for tool in tools:
+        # Create a copy of the tool
+        new_tool = copy.deepcopy(tool)
+        # Add agent prefix to tool name
+        new_tool.name = f"{agent_name}_{tool.name}"
+        prefixed_tools.append(new_tool)
+    return prefixed_tools
 
 
 def load_config() -> Dict[str, Any]:
@@ -262,15 +275,19 @@ async def create_agent(coral_tools: List[Any]) -> AgentExecutor:
     )
     print("[VERBOSE] Chat model initialized successfully")
 
+    print("[VERBOSE] Prefixing tool names to avoid conflicts...")
+    agent_name = "interface"
+    prefixed_coral_tools = prefix_tool_names(coral_tools, agent_name)
+
     print("[VERBOSE] Creating tool calling agent...")
-    agent = create_tool_calling_agent(model, coral_tools, prompt)
+    agent = create_tool_calling_agent(model, prefixed_coral_tools, prompt)
     print("[VERBOSE] Tool calling agent created successfully")
 
     print(
         "[VERBOSE] Creating agent executor with verbose=True and return_intermediate_steps=True"
     )
     executor = AgentExecutor(
-        agent=agent, tools=coral_tools, verbose=True, return_intermediate_steps=True
+        agent=agent, tools=prefixed_coral_tools, verbose=True, return_intermediate_steps=True
     )
     print("[VERBOSE] Agent executor created successfully")
 
@@ -318,21 +335,18 @@ async def main():
 
         print("[VERBOSE] Checking runtime mode and required tools...")
         if config["runtime"] is not None:
-            print("[VERBOSE] Runtime mode detected - validating required tools...")
+            print("[VERBOSE] Runtime mode detected - checking available tools...")
             required_tools = [REQUEST_QUESTION_TOOL, ANSWER_QUESTION_TOOL]
             available_tools = [tool.name for tool in coral_tools]
             print(f"[VERBOSE] Required tools: {required_tools}")
             print(f"[VERBOSE] Available tools: {available_tools}")
 
-            for tool_name in required_tools:
-                if tool_name not in available_tools:
-                    error_message = (
-                        f"Required tool '{tool_name}' not found in coral_tools"
-                    )
-                    print(f"[VERBOSE] ERROR: {error_message}")
-                    logger.error(error_message)
-                    raise ValueError(error_message)
-            print("[VERBOSE] All required tools found")
+            # Check if required tools are available, but don't fail if missing
+            missing_tools = [tool for tool in required_tools if tool not in available_tools]
+            if missing_tools:
+                print(f"[VERBOSE] WARNING: Missing tools {missing_tools} - continuing with available tools")
+            else:
+                print("[VERBOSE] All required tools found")
         else:
             print("[VERBOSE] Interactive mode - no runtime tool validation needed")
 

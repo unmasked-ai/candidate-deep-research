@@ -89,7 +89,7 @@ agentGraphRequest = {
             "blocking": True,
             "options": {
                 "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY},	
-                "GITHUB_PERSONAL_ACCESS_TOKEN": {"type": "string", "value": GH_PAT},
+                "GITHUB_PERSONAL_ACCESS_TOKEN": {"type": "string", "value": GH_PAT}
             },
             "customToolAccess": [],
         },
@@ -100,8 +100,7 @@ agentGraphRequest = {
             "provider": {"type": "local", "runtime": "executable"},
             "blocking": True,
             "options": {
-                "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY},
-                "APIFY_API_KEY": {"type": "string", "value": APIFY_API_KEY}
+                "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY}
             },
             "customToolAccess": [],
         },
@@ -112,8 +111,7 @@ agentGraphRequest = {
             "provider": {"type": "local", "runtime": "executable"},
             "blocking": True,
             "options": {
-                "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY},
-                "APIFY_API_KEY": {"type": "string", "value": APIFY_API_KEY}
+                "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY}
             },
             "customToolAccess": [],
         },
@@ -124,8 +122,7 @@ agentGraphRequest = {
             "provider": {"type": "local", "runtime": "executable"},
             "blocking": True,
             "options": {
-                "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY},
-                "APIFY_API_KEY": {"type": "string", "value": APIFY_API_KEY}
+                "MODEL_API_KEY": {"type": "string", "value": OPENAI_KEY}
             },
             "customToolAccess": [],
         },
@@ -384,15 +381,48 @@ async def submit_research(
 
     # Submit to Coral server
     try:
+        print(f"Submitting request to Coral server: {CORAL_SERVER_HOST}/api/v1/sessions")
+        print(f"Payload keys: {list(payload.keys())}")
+
         async with httpx.AsyncClient() as client:
             response = await client.post(CORAL_SERVER_HOST + "/api/v1/sessions", json=payload)
-            data = response.json()
-            session_id = data.get("sessionId", research_id)
+
+            print(f"Coral server response status: {response.status_code}")
+            print(f"Coral server response headers: {dict(response.headers)}")
+
+            if response.status_code != 200:
+                error_body = response.text
+                print(f"Coral server error response: {error_body}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Coral server returned {response.status_code}: {error_body}"
+                )
+
+            try:
+                data = response.json()
+                print(f"Coral server response data: {data}")
+            except Exception as json_error:
+                print(f"Failed to parse Coral server response as JSON: {json_error}")
+                print(f"Raw response: {response.text}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Invalid JSON response from Coral server: {response.text}"
+                )
+
+            session_id = data.get("sessionId")
+            if not session_id:
+                print(f"No sessionId in response: {data}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Coral server did not return sessionId: {data}"
+                )
 
         # Set up future for this research
         loop = asyncio.get_event_loop()
         future = loop.create_future()
         pending_researches[session_id] = future
+
+        print(f"Successfully created research session: {session_id}")
 
         return ResearchResponse(
             research_id=session_id,
@@ -400,8 +430,15 @@ async def submit_research(
             message="Research request submitted successfully"
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except httpx.RequestError as e:
-        raise HTTPException(status_code=500, detail=f"Error submitting research request: {str(e)}")
+        print(f"HTTP request error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Network error connecting to Coral server: {str(e)}")
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @app.get("/api/research/{research_id}/status")
 async def get_research_status(research_id: str):
