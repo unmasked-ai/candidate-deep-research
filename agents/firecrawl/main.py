@@ -13,6 +13,7 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+
 def prefix_tool_names(tools, agent_name):
     """Prefix tool names with agent name to avoid conflicts across agents"""
     prefixed_tools = []
@@ -38,13 +39,16 @@ async def create_agent(coral_tools, agent_tools):
             (
                 "system",
                 f"""You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
+                
+                **IMPORTANT**
+                You must wait until you are mentioned in a thread by another agent before taking action, calling the `coral_wait_for_mentions` function.
 
-                Communication with other agents must occur in threads. You can create a thread with the firecrawl_coral_create_thread tool,
+                Communication with other agents must occur in threads. You can create a thread with the `coral_create_thread` tool,
                 make sure to include the agents you want to communicate with in the thread. It is possible to add agents to an existing
-                thread with the firecrawl_coral_add_participant tool. If a thread has reached a conclusion or is no longer productive, you
-                can close the thread with the firecrawl_coral_close_thread tool. It is very important to use the firecrawl_coral_send_message
+                thread with the `coral_add_participant` tool. If a thread has reached a conclusion or is no longer productive, you
+                can close the thread with the `coral_close_thread` tool. It is very important to use the `coral_send_message`
                 tool to communicate in these threads as no other agent will see your messages otherwise! If you have sent a message
-                and expect or require a response from another agent, use the firecrawl_coral_wait_for_mentions tool to wait for a response.
+                and expect or require a response from another agent, use the `coral_wait_for_mentions` tool to wait for a response.
 
                 In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
 
@@ -155,12 +159,16 @@ async def main():
 
     # Check if we're in single-task mode (for testing) or continuous mode
     single_task_mode = os.getenv("SINGLE_TASK_MODE", "false").lower() == "true"
-    max_iterations = 1 if single_task_mode else 50  # Limit iterations to prevent endless loops
+    max_iterations = (
+        1 if single_task_mode else 50
+    )  # Limit iterations to prevent endless loops
 
     iteration = 0
     task_completed = False
 
-    print(f"Firecrawl agent starting: single_task_mode={single_task_mode}, max_iterations={max_iterations}")
+    print(
+        f"Firecrawl agent starting: single_task_mode={single_task_mode}, max_iterations={max_iterations}"
+    )
 
     while iteration < max_iterations and not task_completed:
         try:
@@ -172,7 +180,9 @@ async def main():
 
             # In single task mode, complete after one iteration
             if single_task_mode:
-                print("Single task mode - firecrawl agent completing after one iteration")
+                print(
+                    "Single task mode - firecrawl agent completing after one iteration"
+                )
                 task_completed = True
             else:
                 await asyncio.sleep(1)

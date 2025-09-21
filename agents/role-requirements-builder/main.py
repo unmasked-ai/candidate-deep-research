@@ -9,6 +9,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain.tools import StructuredTool
 
+
 # ---------- Spec schema ----------
 class SalaryRange(BaseModel):
     currency: Optional[str] = None
@@ -16,18 +17,22 @@ class SalaryRange(BaseModel):
     max: Optional[float] = None
     period: Optional[str] = Field(default="year", description="year or month")
 
+
 class Location(BaseModel):
     type: Optional[str] = Field(default=None, description="onsite|hybrid|remote")
     cities: Optional[List[str]] = None
+
 
 class ExperienceReq(BaseModel):
     years_min: Optional[float] = None
     years_pref: Optional[float] = None
 
+
 class Evidence(BaseModel):
     source: str = Field(description="jd|company")
     quote: str
     field: str
+
 
 class JobSpec(BaseModel):
     role_title: str
@@ -50,35 +55,56 @@ class JobSpec(BaseModel):
     screening_questions: List[str] = []
     extracted_evidence: List[Evidence] = []
 
+
 class StandardiseInput(BaseModel):
-    raw_spec: dict = Field(description="Partially filled dict for JobSpec built from the JD and research.")
+    raw_spec: dict = Field(
+        description="Partially filled dict for JobSpec built from the JD and research."
+    )
+
 
 def _dedupe(xs: Optional[List[str]]) -> List[str]:
-    if not xs: return []
+    if not xs:
+        return []
     return list(dict.fromkeys([x.strip() for x in xs if x and x.strip()]))
 
+
 def standardise_spec(raw_spec: dict) -> str:
-    for k in ["tech_stack","must_have_hard_skills","nice_to_have_hard_skills",
-              "soft_skills","keywords","benefits","domain_knowledge",
-              "culture_requirements","responsibilities","education_requirements",
-              "screening_questions"]:
+    for k in [
+        "tech_stack",
+        "must_have_hard_skills",
+        "nice_to_have_hard_skills",
+        "soft_skills",
+        "keywords",
+        "benefits",
+        "domain_knowledge",
+        "culture_requirements",
+        "responsibilities",
+        "education_requirements",
+        "screening_questions",
+    ]:
         if k in raw_spec and isinstance(raw_spec[k], list):
             raw_spec[k] = _dedupe(raw_spec[k])
     try:
         spec = JobSpec.model_validate(raw_spec)
     except ValidationError as e:
-        return json.dumps({"error": "validation_failed", "details": json.loads(e.json())})
+        return json.dumps(
+            {"error": "validation_failed", "details": json.loads(e.json())}
+        )
     return spec.model_dump_json()
+
 
 def make_standardise_tool():
     return StructuredTool.from_function(
         name="standardise_spec",
-        description=("Validate and normalise a partially-filled job requirement object "
-                     "into the strict JobSpec JSON. Call this as the FINAL step."),
+        description=(
+            "Validate and normalise a partially-filled job requirement object "
+            "into the strict JobSpec JSON. Call this as the FINAL step."
+        ),
         func=standardise_spec,
         args_schema=StandardiseInput,
         return_direct=False,
     )
+
 
 # ---------- utils ----------
 def get_tools_description(tools):
@@ -86,6 +112,7 @@ def get_tools_description(tools):
         f"Tool: {tool.name}, Schema: {json.dumps(tool.args).replace('{', '{{').replace('}', '}}')}"
         for tool in tools
     )
+
 
 def prefix_tool_names(tools, agent_name):
     """Prefix tool names with agent name to avoid conflicts across agents"""
@@ -98,6 +125,7 @@ def prefix_tool_names(tools, agent_name):
         prefixed_tools.append(new_tool)
     return prefixed_tools
 
+
 async def create_agent(coral_tools, local_tools, company_research_agent_id: str):
     # Prefix coral tool names to avoid conflicts with other agents
     agent_name = "role_requirements_builder"
@@ -107,58 +135,32 @@ async def create_agent(coral_tools, local_tools, company_research_agent_id: str)
     local_tools_description = get_tools_description(local_tools)
     combined_tools = prefixed_coral_tools + local_tools
 
-    COMPANY_RESEARCH_AGENT_ID = company_research_agent_id
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """Goal: Create a comprehensive and standardised job requirement specification for a given role, enriched with company insights.
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system",
-"""
-You are the **Job Requirement Builder Agent**.
+                **IMPORTANT**
+                You must wait until you are mentioned in a thread by another agent before taking action, calling the `coral_wait_for_mentions` function.
 
-Inputs you will receive (as a JSON string in the mention content):
-- job_description: string (raw JD)
-- company_linkedin_url: string | null
-
-Goal:
-1) Parse the JD into a partial spec (fields listed below).
-2) If company_linkedin_url is present, request enrichment from the **Company Research Agent** (agentId="{company_research_agent_id}"):
-   - Send a Coral message using `role_requirements_builder_coral_send_message` in the SAME thread with content:
-     {{
-       "action":"company_snapshot",
-       "company_linkedin_url":"<url>",
-       "need_fields":["industry","culture_signals","locations","salary_benchmarks","common_tech_stack"]
-     }}
-   - Then call `role_requirements_builder_coral_wait_for_mentions` repeatedly (short timeouts ok) UNTIL you receive a reply in the SAME thread FROM that agent. Expect JSON content with any of those fields.
-3) Merge the JD parse + company snapshot into a single dict.
-4) Call the local tool **standardise_spec** with that dict to get the final JobSpec JSON.
-5) Reply to the ORIGINAL sender in the SAME thread with ONLY that JSON.
-6) On any error, send a JSON with {{"error":"...", "details":"..."}}.
-
-Partial spec you should assemble BEFORE calling standardise_spec:
-- role_title, seniority, employment_type
-- salary_range (only if explicit in JD or clearly benchmarked in reply)
-- location {{type, cities}}
-- tech_stack, must_have_hard_skills, nice_to_have_hard_skills, soft_skills
-- industry, domain_knowledge, culture_requirements
-- responsibilities, education_requirements, experience_requirements
-- keywords, benefits, screening_questions
-- extracted_evidence: 2–6 short quotes with source="jd" or "company"
-
-Important rules:
-- Be faithful to text; do NOT invent salary. If unknown, leave null/empty and add a brief note in extracted_evidence.
-- Keep list items short and atomic; normalise tech names (e.g., "postgresql" -> "postgres").
-- Always respond to the sender, even if you only have an error message.
+1. Accept input about the job or company from the Orchestrator.
+2. Parse available details (role title, department, skills, seniority, etc.).
+3. Call the Company Research Agent if company details are missing or incomplete.
+4. Compile responsibilities, required skills, qualifications, and soft skills.
+5. Identify “must-have” vs “nice-to-have” requirements.
+6. Output a structured job requirement document that can be compared with candidate data.
 
 Available Coral tools:
 {coral_tools_description}
-
-Local validation tools:
-{local_tools_description}
-"""),
-        ("placeholder", "{agent_scratchpad}")
-    ]).partial(
+""",
+            ),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    ).partial(
         company_research_agent_id=company_research_agent_id,
         coral_tools_description=coral_tools_description,
-        local_tools_description=local_tools_description
+        local_tools_description=local_tools_description,
     )
 
     model = init_chat_model(
@@ -167,10 +169,13 @@ Local validation tools:
         api_key=os.getenv("MODEL_API_KEY"),
         temperature=float(os.getenv("MODEL_TEMPERATURE", "0.1")),
         max_tokens=int(os.getenv("MODEL_MAX_TOKENS", "8000")),
-        base_url=os.getenv("MODEL_BASE_URL", None)
+        base_url=os.getenv("MODEL_BASE_URL", None),
     )
     agent = create_tool_calling_agent(model, combined_tools, prompt)
-    return AgentExecutor(agent=agent, tools=combined_tools, verbose=True, handle_parsing_errors=True)
+    return AgentExecutor(
+        agent=agent, tools=combined_tools, verbose=True, handle_parsing_errors=True
+    )
+
 
 # ---------- main ----------
 async def main():
@@ -184,7 +189,7 @@ async def main():
 
     coral_params = {
         "agentId": agentID,
-        "agentDescription": "Job Requirement Builder Agent: standardises job specs and enriches via Company Research Agent"
+        "agentDescription": "Job Requirement Builder Agent: standardises job specs and enriches via Company Research Agent",
     }
 
     query_string = urllib.parse.urlencode(coral_params)
@@ -210,7 +215,9 @@ async def main():
 
     print(f"Coral tools: {len(coral_tools)} | local tools: {len(local_tools)}")
 
-    agent_executor = await create_agent(coral_tools, local_tools, company_research_agent_id)
+    agent_executor = await create_agent(
+        coral_tools, local_tools, company_research_agent_id
+    )
 
     while True:
         try:
@@ -222,6 +229,7 @@ async def main():
             print(f"Error in agent loop: {str(e)}")
             print(traceback.format_exc())
             await asyncio.sleep(5)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

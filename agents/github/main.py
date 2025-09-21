@@ -8,11 +8,13 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 from pydantic import BaseModel
 from typing import List
 
+
 # typing for making outputs structured in json format
 class SkilsScore(BaseModel):
     skill: str
     score: float
     reason: str
+
 
 class GitHubReviewAgentOutput(BaseModel):
     summary: str
@@ -21,12 +23,15 @@ class GitHubReviewAgentOutput(BaseModel):
     skills: List[SkilsScore]
     overall_score: float
 
+
 class ErrorOutput(BaseModel):
     error: str
     details: str
 
+
 output_json = json.dumps(GitHubReviewAgentOutput.model_json_schema(), indent=2)
 error_json = json.dumps(ErrorOutput.model_json_schema(), indent=2)
+
 
 def get_tools_description(tools):
     return "\n".join(
@@ -43,11 +48,14 @@ async def create_agent(coral_tools, agent_tools):
         [
             (
                 "system",
-                    
                 f"""    
                 # GitHub Review Agent (Coral)
+                
+                You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
 
-- **Mode**: Reactive → wait for mentions via `coral_wait_for_mentions` before acting.  
+                **IMPORTANT**
+                You must wait until you are mentioned in a thread by another agent before taking action, calling the `coral_wait_for_mentions` function.
+
 - **Inputs (JSON)**:
   - `github_profile_url`: str  
   - `max_repos`: int (default 3)  
@@ -74,12 +82,12 @@ Concise, evidence-backed GitHub review. **Output JSON only**.
 ## Strategy  
 
 ### 1. Discovery  
-- Fetch repos (`per_page=100`, sort=updated, skip forks/archived/templates).  
+- Fetch repos (`per_page=3`, sort=updated, skip forks/archived/templates).  
 - Pick top `max_repos` with technical signals (workflows, configs, docs, container files).  
 
 ### 2. Tree-first scan  
 - One tree call per repo. Score ~70% from structure/signals.  
-- Curiosity budget: 6 (2 if <100 rate limit).  
+- Curiosity budget: 1.  
 
 ### 3. Targeted deep dives  
 Spend budget only if signals found:  
@@ -115,8 +123,9 @@ Spend budget only if signals found:
   ],
   "overall_score": 0.0
 
-
-                """
+                These are the list of coral tools: {coral_tools_description}
+                These are the list of your tools: {agent_tools_description}
+                """,
             ),
             ("placeholder", "{agent_scratchpad}"),
         ]
@@ -177,26 +186,57 @@ async def main():
         }
     )
 
-    print("Multi Server Connection Initialized")
+    print("Multi Server Connection Established")
 
     coral_tools = await client.get_tools(server_name="coral")
-    github_tools = await client.get_tools(server_name="github")
+    agent_tools = await client.get_tools(server_name="github")
+
     print(
-        f"Coral tools count: {len(coral_tools)}, GitHub tools count: {len(github_tools)}"
+        f"Coral tools count: {len(coral_tools)} and agent tools count: {len(agent_tools)}"
     )
 
-    agent_executor = await create_agent(coral_tools, github_tools)
+    agent_executor = await create_agent(coral_tools, agent_tools)
+
+    # Check if we're in single-task mode (for testing) or continuous mode
+    single_task_mode = os.getenv("SINGLE_TASK_MODE", "false").lower() == "true"
+    max_iterations = (
+        1 if single_task_mode else 50
+    )  # Limit iterations to prevent endless loops
+
+    iteration = 0
+    task_completed = False
+
+    print(
+        f"Github agent starting: single_task_mode={single_task_mode}, max_iterations={max_iterations}"
+    )
 
     while True:
         try:
-            print("Starting new agent invocation")
-            await agent_executor.ainvoke({"agent_scratchpad": []})
-            print("Completed agent invocation, restarting loop")
-            await asyncio.sleep(1)
+            iteration += 1
+            print(f"Starting agent invocation {iteration}/{max_iterations}")
+
+            result = await agent_executor.ainvoke({"agent_scratchpad": []})
+            print(f"Completed agent invocation {iteration}")
+
+            # In single task mode, complete after one iteration
+            if single_task_mode:
+                print("Single task mode - github agent completing after one iteration")
+                task_completed = True
+            else:
+                await asyncio.sleep(1)
+
         except Exception as e:
-            print(f"Error in agent loop: {e}")
-            traceback.print_exc()
+            print(f"Error in agent loop iteration {iteration}: {str(e)}")
+            print(traceback.format_exc())
             await asyncio.sleep(5)
+
+    # Agent execution completed
+    if task_completed:
+        print("Github agent task completed successfully")
+    else:
+        print(f"Github agent reached maximum iterations ({max_iterations})")
+
+    print("Github agent terminating gracefully")
 
 
 if __name__ == "__main__":

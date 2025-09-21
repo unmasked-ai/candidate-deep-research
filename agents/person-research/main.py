@@ -13,6 +13,7 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+
 def prefix_tool_names(tools, agent_name):
     """Prefix tool names with agent name to avoid conflicts across agents"""
     prefixed_tools = []
@@ -37,18 +38,7 @@ async def create_agent(coral_tools, agent_tools):
         [
             (
                 "system",
-                f"""You are an agent that exists in a Coral multi agent system. You must communicate with other agents.
-
-                Communication with other agents must occur in threads. You can create a thread with the person_research_coral_create_thread tool,
-                make sure to include the agents you want to communicate with in the thread. It is possible to add agents to an existing
-                thread with the person_research_coral_add_participant tool. If a thread has reached a conclusion or is no longer productive, you
-                can close the thread with the person_research_coral_close_thread tool. It is very important to use the person_research_coral_send_message
-                tool to communicate in these threads as no other agent will see your messages otherwise! If you have sent a message
-                and expect or require a response from another agent, use the person_research_coral_wait_for_mentions tool to wait for a response.
-
-                In most cases assistant message output will not reach the user. Use tooling where possible to communicate with the user instead.
-
-                Your task is to do deep research on a person, aggregating information from different sources such as LinkedIn, GitHub, personal portfolio website, and build a profile about a person. The exact persona and metrics may be defined by the instructions it receives from other agents, otherwise optimise for a candidate.
+                f"""Your task is to do deep research on a person, aggregating information from different sources such as LinkedIn, GitHub, personal portfolio website, and build a profile about a person. The exact persona and metrics may be defined by the instructions it receives from other agents, otherwise optimise for a candidate.
 
                 MULTI-SOURCE RESEARCH STRATEGY:
                 1. LinkedIn research: Delegate to linkedin agent for professional background

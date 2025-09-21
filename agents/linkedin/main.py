@@ -13,6 +13,7 @@ def get_tools_description(tools):
         for tool in tools
     )
 
+
 def prefix_tool_names(tools, agent_name):
     """Prefix tool names with agent name to avoid conflicts across agents"""
     prefixed_tools = []
@@ -37,31 +38,21 @@ async def create_agent(coral_tools, agent_tools):
         [
             (
                 "system",
-                f"""You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
+                f"""Your goal is to research people and companies on LinkedIn, given either their name or LinkedIn URL, and return structured JSON output with relevant details.
+                
+                You are an agent that exists in a Coral multi agent system.  You must communicate with other agents.
 
-                Communication with other agents must occur in threads. You can create a thread with the linkedin_coral_create_thread tool,
-                make sure to include the agents you want to communicate with in the thread. It is possible to add agents to an existing
-                thread with the linkedin_coral_add_participant tool. If a thread has reached a conclusion or is no longer productive, you
-                can close the thread with the linkedin_coral_close_thread tool. It is very important to use the linkedin_coral_send_message
-                tool to communicate in these threads as no other agent will see your messages otherwise! If you have sent a message
-                and expect or require a response from another agent, use the linkedin_coral_wait_for_mentions tool to wait for a response.
+                **IMPORTANT**
+                You must wait until you are mentioned in a thread by another agent before taking action, calling the `coral_wait_for_mentions` function.
 
-                In most cases assistant message output will not reach the user.  Use tooling where possible to communicate with the user instead.
-
-                Your task is to fetch data from LinkedIn, for both people and companies. This works for person/company name or LinkedIn URL.
-
-                IMPORTANT FALLBACK STRATEGY:
-                If any Apify LinkedIn tools fail due to API limits, rate limits, or other errors, you should:
-                1. Acknowledge the limitation in your response
-                2. Suggest alternative research methods by delegating to other agents:
-                   - Use firecrawl agent for company website scraping
-                   - Use github agent for technical profiles
-                   - Use general web search capabilities
-                3. Provide any available cached or basic information you can gather
-                4. Always respond with something useful rather than just reporting the error
-
-                Example fallback response:
-                "I'm unable to access LinkedIn data due to API limits. However, I can coordinate with other agents to research [company/person] through their website, GitHub profile, and other public sources. Let me delegate this to the firecrawl agent for website research."
+                Goal
+                1. Accept input containing a target LinkedIn URL (person or company).
+                2. Extract data using the apify linkedin tools, always passing the LinkedIn URL as input to these calls:
+                    - For candidates: work history, education, endorsements, skills.
+                    - For companies: size, industry, employees, hiring trends.
+                3. Clean and normalize the extracted information.
+                4. Return structured JSON output to the requesting agent.
+                5. Always respond with something useful rather than just reporting the error
 
                 These are the list of coral tools: {coral_tools_description}
                 These are the list of your tools: {agent_tools_description}""",
@@ -132,16 +123,48 @@ async def main():
 
     agent_executor = await create_agent(coral_tools, agent_tools)
 
+    # Check if we're in single-task mode (for testing) or continuous mode
+    single_task_mode = os.getenv("SINGLE_TASK_MODE", "false").lower() == "true"
+    max_iterations = (
+        1 if single_task_mode else 50
+    )  # Limit iterations to prevent endless loops
+
+    iteration = 0
+    task_completed = False
+
+    print(
+        f"LinkedIn agent starting: single_task_mode={single_task_mode}, max_iterations={max_iterations}"
+    )
+
     while True:
         try:
-            print("Starting new agent invocation")
-            await agent_executor.ainvoke({"agent_scratchpad": []})
-            print("Completed agent invocation, restarting loop")
-            await asyncio.sleep(1)
+            iteration += 1
+            print(f"Starting agent invocation {iteration}/{max_iterations}")
+
+            result = await agent_executor.ainvoke({"agent_scratchpad": []})
+            print(f"Completed agent invocation {iteration}")
+
+            # In single task mode, complete after one iteration
+            if single_task_mode:
+                print(
+                    "Single task mode - LinkedIn agent completing after one iteration"
+                )
+                task_completed = True
+            else:
+                await asyncio.sleep(1)
+
         except Exception as e:
-            print(f"Error in agent loop: {str(e)}")
+            print(f"Error in agent loop iteration {iteration}: {str(e)}")
             print(traceback.format_exc())
             await asyncio.sleep(5)
+
+    # Agent execution completed
+    if task_completed:
+        print("LinkedIn agent task completed successfully")
+    else:
+        print(f"LinkedIn agent reached maximum iterations ({max_iterations})")
+
+    print("LinkedIn agent terminating gracefully")
 
 
 if __name__ == "__main__":
